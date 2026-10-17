@@ -1,0 +1,23 @@
+{
+  "name": "cloudnotes-monorepo",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Multiplatform Offline-First Note-Taking System with Stealth Variable-Length PIN, Native Server Media Storage & End-to-End Cryptography",
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "scripts": {
+    "server": ".\\database\\pocketbase.exe serve --dir=database/pb_data --publicDir=database/pb_public --migrationsDir=database/pb_migrations",
+    "dev:web": "npm run dev --workspace=apps/web",
+    "build:web": "npm run build --workspace=apps/web",
+    "dev:mobile": "npm run start --workspace=apps/mobile",
+    "test": "vitest run",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "postinstall": "node apps/mobile/scripts/patch-expo-sqlite.js"
+  },
+  "devDependencies": {
+    "typescript": "^5.5.4",
+    "vitest": "^2.1.8"
+  }
+}

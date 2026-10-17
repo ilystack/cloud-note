@@ -1,0 +1,51 @@
+{
+  "expo": {
+    "name": "CloudNotes",
+    "slug": "cloudnotes-monorepo",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "scheme": "cloudnotes",
+    "userInterfaceStyle": "dark",
+    "splash": {
+      "image": "./assets/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#0b0f19"
+    },
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.cloudnotes.app",
+      "infoPlist": {
+        "NSFaceIDUsageDescription": "Use Face ID to securely unlock your CloudNotes stealth vault."
+      }
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#0b0f19"
+      },
+      "package": "com.cloudnotes.app",
+      "permissions": [
+        "USE_BIOMETRIC",
+        "USE_FINGERPRINT",
+        "CAMERA",
+        "READ_EXTERNAL_STORAGE",
+        "WRITE_EXTERNAL_STORAGE"
+      ]
+    },
+    "plugins": [
+      "expo-router",
+      "expo-secure-store",
+      "expo-local-authentication",
+      "./plugins/withCustomGradleProperties"
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "73d11dc8-21b9-43d2-b193-591ba2e42b08"
+      }
+    },
+    "experiments": {
+      "typedRoutes": true
+    }
+  }
+}

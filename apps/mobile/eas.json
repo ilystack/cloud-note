@@ -1,0 +1,30 @@
+{
+    "cli": {
+        "version": ">= 10.0.0",
+        "appVersionSource": "remote"
+    },
+    "build": {
+        "development": {
+            "developmentClient": true,
+            "distribution": "internal",
+            "env": {
+                "JAVA_OPTS": "-Djava.net.preferIPv4Stack=true -Djava.net.preferIPv4Addresses=true",
+                "GRADLE_OPTS": "-Djava.net.preferIPv4Stack=true -Djava.net.preferIPv4Addresses=true -Xmx4096m"
+            },
+            "android": {
+                "buildType": "apk"
+            }
+        },
+        "preview": {
+            "distribution": "internal",
+            "env": {
+                "JAVA_OPTS": "-Djava.net.preferIPv4Stack=true -Djava.net.preferIPv4Addresses=true",
+                "GRADLE_OPTS": "-Djava.net.preferIPv4Stack=true -Djava.net.preferIPv4Addresses=true -Xmx4096m"
+            },
+            "android": {
+                "buildType": "apk"
+            }
+        },
+        "production": {}
+    }
+}

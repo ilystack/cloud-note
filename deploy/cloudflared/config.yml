@@ -1,0 +1,10 @@
+# Cloudflare Tunnel Configuration Template
+# Strictly adhering to RFC 2606 dummy domain examples
+
+tunnel: dummy-tunnel-id-0000-0000-000000000000
+credentials-file: /etc/cloudflared/credentials.json
+
+ingress:
+  - hostname: notes.example.com
+    service: http://pocketbase:8090
+  - service: http_status:404
