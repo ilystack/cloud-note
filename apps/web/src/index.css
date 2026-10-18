@@ -4,55 +4,313 @@
 
 @layer base {
   :root {
-    --bg-main: #0b0f19;
-    --card-surface: #111827;
-    --card-border: #1f293d;
+    --bg-main: #f8fafc;
+    --text-primary: #0f172a;
+    --text-secondary: #475569;
+    --card-surface: #ffffff;
+    --card-surface-hover: #f1f5f9;
+    --card-border: #e2e8f0;
+    --card-border-hover: #cbd5e1;
+    --header-bg: rgba(248, 250, 252, 0.88);
+    --modal-bg: #ffffff;
+    --modal-border: #e2e8f0;
+  }
+
+  html.dark, :root.dark {
+    /* Pure neutral dark / rich charcoal - no blue cast, soothing to the eyes */
+    --bg-main: #121214;
+    --text-primary: #f4f4f5;
+    --text-secondary: #a1a1aa;
+    --card-surface: #18191d;
+    --card-surface-hover: #222328;
+    --card-border: rgba(255, 255, 255, 0.08);
+    --card-border-hover: rgba(255, 255, 255, 0.16);
+    --header-bg: rgba(18, 18, 20, 0.88);
+    --modal-bg: #17181c;
+    --modal-border: rgba(255, 255, 255, 0.1);
+  }
+
+  html {
+    scroll-behavior: smooth;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
   }
 
   body {
     background-color: var(--bg-main);
-    color: #e2e8f0;
-    font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+    color: var(--text-primary);
+    font-feature-settings: "cv02", "cv03", "cv04", "cv11", "tnum";
+    caret-color: #f59e0b;
+    transition: background-color 0.2s ease, color 0.2s ease;
+  }
+
+  /* Accessible focus indicators */
+  :focus-visible {
+    outline: 2px solid rgba(245, 158, 11, 0.6);
+    outline-offset: 2px;
   }
 }
 
-/* Custom modern scrollbars */
+/* Custom minimal scrollbar */
 ::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
+  width: 5px;
+  height: 5px;
 }
 ::-webkit-scrollbar-track {
   background: transparent;
 }
 ::-webkit-scrollbar-thumb {
-  background: #2a354c;
+  background: #cbd5e1;
   border-radius: 9999px;
 }
+.dark ::-webkit-scrollbar-thumb {
+  background: #27272a;
+}
 ::-webkit-scrollbar-thumb:hover {
-  background: #3b4968;
+  background: #94a3b8;
+}
+.dark ::-webkit-scrollbar-thumb:hover {
+  background: #3f3f46;
 }
 
-/* Glassmorphism helpers */
-.glass-panel {
-  background: rgba(17, 24, 39, 0.75);
+/* Refined Header & Surface Backdrop (Borderless) */
+.header-surface {
+  background: var(--header-bg);
   backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  transition: background-color 0.2s ease;
 }
 
-.glass-header {
-  background: rgba(11, 15, 25, 0.85);
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.07);
+.modal-surface {
+  background: var(--modal-bg);
+  border: 1px solid var(--modal-border);
+  transition: background-color 0.2s ease, border-color 0.2s ease;
 }
 
-/* Subtle glowing pulse */
-@keyframes pulse-subtle {
-  0%, 100% { opacity: 1; transform: scale(1); }
-  50% { opacity: 0.85; transform: scale(1.02); }
+/* Bento card clean flat states */
+.bento-card {
+  background: var(--card-surface);
+  border: 1px solid var(--card-border);
+  transition: background-color 0.15s ease, border-color 0.15s ease;
 }
 
-.animate-pulse-subtle {
-  animation: pulse-subtle 3s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+.bento-card:hover {
+  background: var(--card-surface-hover);
+  border-color: var(--card-border-hover);
 }
+
+/* Dynamic Note Card Ambient Paper Style (Craft.do / Google Keep Dark) */
+.note-card-colored {
+  background-color: var(--card-bg-light, #FDFBF7);
+  border-color: var(--card-border-light, #F3E8CE);
+  box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.02);
+  transition: background-color 0.2s cubic-bezier(0.16, 1, 0.3, 1), 
+              border-color 0.2s cubic-bezier(0.16, 1, 0.3, 1),
+              box-shadow 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.note-card-colored:hover {
+  border-color: var(--card-border-hover-light, #cbd5e1);
+  box-shadow: 0 4px 12px -2px rgba(0, 0, 0, 0.05);
+}
+
+html.dark .note-card-colored, :root.dark .note-card-colored {
+  background-color: var(--card-bg-dark, #1c1813);
+  border-color: var(--card-border-dark, rgba(255, 255, 255, 0.14));
+  box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.25);
+}
+
+html.dark .note-card-colored:hover, :root.dark .note-card-colored:hover {
+  background-color: var(--card-hover-dark, #231e17);
+  border-color: var(--card-border-hover-dark, rgba(255, 255, 255, 0.35));
+  box-shadow: 0 8px 20px -4px rgba(0, 0, 0, 0.45);
+}
+
+/* Subtle transitions for modal popups */
+@keyframes modal-fade-in {
+  from {
+    opacity: 0;
+    transform: scale(0.98) translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+.animate-modal-in {
+  animation: modal-fade-in 0.2s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+@keyframes field-slide-down {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-field-in {
+  animation: field-slide-down 0.2s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+/* ========================================================
+   One-Shot Page Load Scribble & Gliding Pen Animation
+   The pen starts at the stroke beginning, draws the line,
+   and stops permanently at the end of the stroke.
+   ======================================================== */
+@keyframes draw-scribble-line {
+  0% {
+    stroke-dashoffset: 100;
+  }
+  100% {
+    stroke-dashoffset: 0;
+  }
+}
+
+@keyframes slide-pen-on-line {
+  0% {
+    left: 0%;
+    transform: translate(-2px, -8px) rotate(-14deg);
+    opacity: 0;
+  }
+  12% {
+    opacity: 1;
+  }
+  35% {
+    transform: translate(-2px, -7px) rotate(-8deg);
+  }
+  70% {
+    transform: translate(-2px, -9px) rotate(-15deg);
+  }
+  100% {
+    left: 100%;
+    transform: translate(-3px, -8px) rotate(-12deg);
+    opacity: 1;
+  }
+}
+
+.animate-draw-line {
+  stroke-dasharray: 100;
+  stroke-dashoffset: 100;
+  animation: draw-scribble-line 0.85s cubic-bezier(0.22, 1, 0.36, 1) 0.2s forwards;
+}
+
+.animate-slide-pen {
+  position: absolute;
+  top: 0;
+  left: 0;
+  opacity: 0;
+  animation: slide-pen-on-line 0.85s cubic-bezier(0.22, 1, 0.36, 1) 0.2s forwards;
+  pointer-events: none;
+  will-change: left, transform;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-draw-line {
+    animation: none;
+    stroke-dashoffset: 0;
+  }
+  .animate-slide-pen {
+    animation: none;
+    left: 100%;
+    transform: translate(-3px, -8px) rotate(-12deg);
+    opacity: 1;
+  }
+}
+
+.rich-editor-content {
+  min-height: 360px;
+  outline: none;
+  font-family: inherit;
+}
+
+.rich-editor-content:empty:before {
+  content: attr(data-placeholder);
+  color: #94a3b8;
+  pointer-events: none;
+  display: block;
+}
+
+.dark .rich-editor-content:empty:before {
+  color: #71717a;
+}
+
+.rich-editor-content h1 {
+  font-size: 1.6rem;
+  font-weight: 700;
+  margin: 1rem 0 0.5rem;
+  color: inherit;
+}
+
+.rich-editor-content h2 {
+  font-size: 1.35rem;
+  font-weight: 700;
+  margin: 0.85rem 0 0.4rem;
+  color: inherit;
+}
+
+.rich-editor-content h3 {
+  font-size: 1.15rem;
+  font-weight: 600;
+  margin: 0.75rem 0 0.35rem;
+  color: inherit;
+}
+
+.rich-editor-content p {
+  margin: 0.35rem 0;
+}
+
+.rich-editor-content ul {
+  list-style-type: disc;
+  margin: 0.4rem 0 0.4rem 1.4rem;
+}
+
+.rich-editor-content ol {
+  list-style-type: decimal;
+  margin: 0.4rem 0 0.4rem 1.4rem;
+}
+
+.rich-editor-content li {
+  margin: 0.2rem 0;
+}
+
+.rich-editor-content pre {
+  background: rgba(0, 0, 0, 0.05);
+  padding: 0.75rem 1rem;
+  border-radius: 0.5rem;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 0.875rem;
+  margin: 0.75rem 0;
+  overflow-x: auto;
+}
+
+.dark .rich-editor-content pre {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.rich-editor-content code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  background: rgba(0, 0, 0, 0.05);
+  padding: 0.15rem 0.35rem;
+  border-radius: 0.25rem;
+  font-size: 0.875em;
+}
+
+.dark .rich-editor-content code {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.rich-editor-content blockquote {
+  border-left: 3px solid #f59e0b;
+  padding-left: 0.875rem;
+  margin: 0.75rem 0;
+  font-style: italic;
+  opacity: 0.9;
+}
+
+
+

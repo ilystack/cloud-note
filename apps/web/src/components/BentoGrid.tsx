@@ -1,28 +1,39 @@
 import React from 'react';
 import { LocalNote } from '@cloudnotes/shared-types';
 import { NoteCard } from './NoteCard';
-import { TrashBentoCard } from './TrashBentoCard';
+import { FileText } from 'lucide-react';
 
 interface BentoGridProps {
   activeNotes: LocalNote[];
-  deletedNotesCount: number;
   onOpenNote: (note: LocalNote) => void;
   onDeleteNote: (noteId: string) => void;
   onArchiveToggle: (note: LocalNote) => void;
-  onOpenTrashGallery: () => void;
 }
 
 export const BentoGrid: React.FC<BentoGridProps> = ({
   activeNotes,
-  deletedNotesCount,
   onOpenNote,
   onDeleteNote,
   onArchiveToggle,
-  onOpenTrashGallery,
 }) => {
+  if (activeNotes.length === 0) {
+    return (
+      <div className="py-20 flex flex-col items-center justify-center text-center select-none">
+        <div className="w-12 h-12 rounded-2xl flex items-center justify-center bg-slate-100 dark:bg-[#16171b] border border-slate-200 dark:border-neutral-800 text-slate-400 dark:text-neutral-500 mb-3">
+          <FileText className="w-5 h-5 stroke-[1.5]" />
+        </div>
+        <h4 className="text-sm font-semibold text-slate-700 dark:text-neutral-300">
+          No notes yet
+        </h4>
+        <p className="text-xs text-slate-400 dark:text-neutral-500 mt-1 max-w-xs">
+          Start capturing ideas or documents by clicking the (+) button.
+        </p>
+      </div>
+    );
+  }
+
   return (
-    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-      {/* 1. Active Notes */}
+    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 auto-rows-fr">
       {activeNotes.map((note) => (
         <NoteCard
           key={note.id}
@@ -38,13 +49,6 @@ export const BentoGrid: React.FC<BentoGridProps> = ({
           }}
         />
       ))}
-
-      {/* 2. Trash Bento Card: ALWAYS in last position (N+1), or first if activeNotes is empty (N=0) */}
-      <TrashBentoCard
-        count={deletedNotesCount}
-        onClick={onOpenTrashGallery}
-        isOnlyCard={activeNotes.length === 0}
-      />
     </div>
   );
 };

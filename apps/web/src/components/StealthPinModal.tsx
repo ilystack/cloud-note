@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Lock, Delete, ArrowRight, X, AlertCircle } from 'lucide-react';
 import { isValidPin, getStealthMask, hashPin, verifyPinHash } from '@cloudnotes/shared-types';
 import { getStoredPinHash, setStoredPinHash, setSessionUnlockedPin } from '../lib/storage';
@@ -24,6 +24,28 @@ export const StealthPinModal: React.FC<StealthPinModalProps> = ({
   const [confirmPin, setConfirmPin] = useState<string>('');
   const [setupStep, setSetupStep] = useState<'create' | 'confirm'>('create');
   const [errorMsg, setErrorMsg] = useState<string>('');
+
+  // Physical keyboard support for typing PIN on web desktop
+  useEffect(() => {
+    if (!isOpen) return;
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key >= '0' && e.key <= '9') {
+        handleDigit(e.key);
+      } else if (e.key === 'Backspace') {
+        handleBackspace();
+      } else if (e.key === 'Enter') {
+        e.preventDefault();
+        handleSubmit();
+      } else if (e.key === 'Escape') {
+        e.preventDefault();
+        onClose();
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isOpen, pin, confirmPin, setupStep, mode]);
 
   if (!isOpen) return null;
 
@@ -60,13 +82,13 @@ export const StealthPinModal: React.FC<StealthPinModalProps> = ({
     if (mode === 'setup') {
       if (setupStep === 'create') {
         if (!isValidPin(pin)) {
-          setErrorMsg('PIN must be at least 2 digits (e.g., 79, 1234, 892014)');
+          setErrorMsg('PIN must be at least 2 digits (e.g. 79, 1234, 892014)');
           return;
         }
         setSetupStep('confirm');
       } else {
         if (pin !== confirmPin) {
-          setErrorMsg('PIN confirmation does not match. Try again.');
+          setErrorMsg('Confirmation does not match. Please try again.');
           setConfirmPin('');
           return;
         }
@@ -80,7 +102,6 @@ export const StealthPinModal: React.FC<StealthPinModalProps> = ({
       return;
     }
 
-    // Unlock mode
     if (!isValidPin(pin)) {
       setErrorMsg('Please enter a valid PIN (at least 2 digits)');
       return;
@@ -95,7 +116,6 @@ export const StealthPinModal: React.FC<StealthPinModalProps> = ({
       }
     }
 
-    // Success
     setSessionUnlockedPin(pin);
     onSuccess(pin);
     onClose();
@@ -104,103 +124,100 @@ export const StealthPinModal: React.FC<StealthPinModalProps> = ({
   const currentDisplayLength = (mode === 'setup' && setupStep === 'confirm') ? confirmPin.length : pin.length;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md">
-      <div className="relative w-full max-w-sm rounded-3xl glass-panel p-6 sm:p-8 border border-slate-700/60 shadow-2xl animate-in fade-in zoom-in-95 duration-200">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-modal-in">
+      <div className="relative w-full max-w-sm rounded-2xl modal-surface p-6 sm:p-7 text-left select-none">
         <button
           onClick={onClose}
-          className="absolute top-5 right-5 p-2 rounded-xl text-slate-400 hover:text-white hover:bg-slate-800 transition-colors"
+          className="absolute top-4 right-4 p-1.5 rounded-lg text-slate-400 hover:text-slate-700 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
+          aria-label="Close"
         >
-          <X className="w-5 h-5" />
+          <X className="w-4 h-4" />
         </button>
 
-        {/* Icon & Title */}
-        <div className="flex flex-col items-center text-center">
-          <div className="p-4 rounded-2xl bg-amber-500/10 text-amber-400 border border-amber-500/20 mb-3">
-            <Lock className="w-6 h-6" />
+        <div className="flex items-start space-x-3 mb-4">
+          <div className="w-9 h-9 rounded-xl bg-amber-500/10 text-amber-500 dark:text-amber-400 border border-amber-500/20 flex items-center justify-center flex-shrink-0">
+            <Lock className="w-4 h-4" />
           </div>
 
-          <h3 className="text-xl font-bold text-slate-100">
-            {title || (mode === 'setup' 
-              ? (setupStep === 'create' ? 'Create Stealth PIN' : 'Confirm Stealth PIN')
-              : 'Stealth Vault Security')}
-          </h3>
-
-          <p className="mt-1 text-xs text-slate-400 max-w-xs">
-            {description || (mode === 'setup'
-              ? 'Choose any numeric PIN (2 digits or longer). No one can guess the length.'
-              : 'Enter your variable-length stealth PIN and tap Unlock.')}
-          </p>
+          <div>
+            <h3 className="text-base font-semibold text-slate-900 dark:text-slate-100 tracking-tight">
+              {title || (mode === 'setup' 
+                ? (setupStep === 'create' ? 'Create Stealth PIN' : 'Confirm Stealth PIN')
+                : 'Vault Verification')}
+            </h3>
+            <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
+              {description || (mode === 'setup'
+                ? 'Variable length (2+ digits). Length is strictly hidden.'
+                : 'Enter your stealth PIN and submit.')}
+            </p>
+          </div>
         </div>
 
-        {/* Dynamic Stealth Masked Display (No static slots) */}
-        <div className="mt-6 flex flex-col items-center">
-          <div className="min-h-[52px] w-full px-4 py-2.5 rounded-2xl bg-slate-950/80 border border-slate-800 flex items-center justify-center space-x-1.5 overflow-hidden">
+        <div className="mt-4">
+          <div className="min-h-[46px] w-full px-4 py-2 rounded-xl bg-slate-100 dark:bg-[#121316] border border-slate-300/80 dark:border-neutral-800 flex items-center justify-center space-x-1 overflow-hidden font-mono">
             {currentDisplayLength === 0 ? (
-              <span className="text-xs text-slate-600 font-mono italic">
+              <span className="text-xs text-slate-400 dark:text-neutral-500 italic">
                 {mode === 'setup' && setupStep === 'confirm' ? 'Re-enter PIN...' : 'Type PIN (any length)...'}
               </span>
             ) : (
-              <div className="flex items-center space-x-1 tracking-widest text-amber-400 text-lg font-bold">
+              <div className="flex items-center space-x-1 tracking-widest text-amber-500 dark:text-amber-400 text-base font-bold">
                 {getStealthMask(currentDisplayLength)}
               </div>
             )}
           </div>
 
           {errorMsg && (
-            <div className="mt-2 flex items-center space-x-1.5 text-xs text-rose-400">
+            <div className="mt-2 flex items-center space-x-1.5 text-xs text-rose-500 dark:text-rose-400">
               <AlertCircle className="w-3.5 h-3.5 flex-shrink-0" />
               <span>{errorMsg}</span>
             </div>
           )}
         </div>
 
-        {/* Numeric Keypad (Stealth Defense) */}
-        <div className="mt-6 grid grid-cols-3 gap-2.5">
+        <div className="mt-4 grid grid-cols-3 gap-2">
           {['1', '2', '3', '4', '5', '6', '7', '8', '9'].map((digit) => (
             <button
               key={digit}
               type="button"
               onClick={() => handleDigit(digit)}
-              className="h-13 py-3 rounded-2xl bg-slate-800/60 hover:bg-slate-700/80 text-xl font-bold text-slate-100 transition-all active:scale-95 border border-slate-700/40"
+              className="h-11 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-[#1c1d22] dark:hover:bg-[#25262c] text-base font-mono font-semibold text-slate-800 dark:text-neutral-100 transition-all active:scale-[0.97] border border-slate-300/80 dark:border-neutral-800 cursor-pointer"
             >
               {digit}
             </button>
           ))}
 
-          {/* Clear / Backspace */}
           <button
             type="button"
             onClick={handleBackspace}
-            className="h-13 py-3 rounded-2xl bg-slate-800/40 hover:bg-slate-700 text-slate-300 flex items-center justify-center transition-all active:scale-95 border border-slate-700/30"
+            className="h-11 rounded-xl bg-slate-50 hover:bg-slate-100 dark:bg-[#16171b] dark:hover:bg-[#202126] text-slate-500 hover:text-slate-800 dark:text-neutral-400 dark:hover:text-neutral-200 flex items-center justify-center transition-all active:scale-[0.97] border border-slate-300/80 dark:border-neutral-800 cursor-pointer"
+            title="Backspace"
           >
-            <Delete className="w-5 h-5" />
+            <Delete className="w-4 h-4" />
           </button>
 
           <button
             type="button"
             onClick={() => handleDigit('0')}
-            className="h-13 py-3 rounded-2xl bg-slate-800/60 hover:bg-slate-700/80 text-xl font-bold text-slate-100 transition-all active:scale-95 border border-slate-700/40"
+            className="h-11 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-[#1c1d22] dark:hover:bg-[#25262c] text-base font-mono font-semibold text-slate-800 dark:text-neutral-100 transition-all active:scale-[0.97] border border-slate-300/80 dark:border-neutral-800 cursor-pointer"
           >
             0
           </button>
 
-          {/* Submit Button (Centang / Unlock) */}
           <button
             type="button"
             onClick={handleSubmit}
-            className="h-13 py-3 rounded-2xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-extrabold flex items-center justify-center transition-all active:scale-95 shadow-lg shadow-amber-500/20"
-            title="Unlock / Submit"
+            className="h-11 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold flex items-center justify-center transition-all active:scale-[0.97] cursor-pointer"
+            title="Submit PIN"
           >
-            <ArrowRight className="w-6 h-6 stroke-[3]" />
+            <ArrowRight className="w-4 h-4 stroke-[3]" />
           </button>
         </div>
 
-        {/* Bottom helper */}
-        <div className="mt-4 flex items-center justify-between text-xs text-slate-500">
+        <div className="mt-3.5 pt-2.5 border-t border-slate-800/80 flex items-center justify-between text-[11px] text-slate-500 font-mono">
           <button onClick={handleClear} className="hover:text-slate-300 transition-colors">
             Clear
           </button>
-          <span>Variable-Length Stealth</span>
+          <span>Physical Keyboard Active</span>
         </div>
       </div>
     </div>

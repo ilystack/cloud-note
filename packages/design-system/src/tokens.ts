@@ -1,21 +1,24 @@
 /**
  * Design system tokens (radii, shadows, animations, typography)
+ * Refined for Linear/Notion editorial aesthetics with Bento layouts
  */
 
 export const BENTO_RADII = {
-  sm: 'rounded-lg',
-  md: 'rounded-xl',
-  lg: 'rounded-2xl',
-  xl: 'rounded-3xl',
+  sm: 'rounded-md',    // 6px - badges & chips
+  md: 'rounded-lg',    // 8px - buttons & inputs
+  lg: 'rounded-xl',    // 12px - cards & dropdowns
+  xl: 'rounded-2xl',   // 16px - modals & containers
 };
 
 export const TRANSITIONS = {
-  default: 'transition-all duration-200 ease-in-out',
-  spring: 'transition-all duration-300 cubic-bezier(0.34, 1.56, 0.64, 1)',
+  default: 'transition-all duration-200 ease-out',
+  subtle: 'transition-colors duration-150 ease-out',
+  spring: 'transition-all duration-250 cubic-bezier(0.16, 1, 0.3, 1)',
 };
 
 export const ELEVATIONS = {
-  card: 'shadow-sm hover:shadow-md dark:shadow-none',
-  cardHover: 'hover:-translate-y-0.5 hover:shadow-lg',
-  modal: 'shadow-2xl',
+  card: 'shadow-none',
+  cardHover: 'hover:border-slate-700 hover:shadow-xl hover:shadow-black/40',
+  modal: 'shadow-2xl shadow-black/80',
 };
+

@@ -128,7 +128,7 @@ export const DrawingCanvasModal: React.FC<DrawingCanvasModalProps> = ({
     const canvas = canvasRef.current;
     if (!canvas) return;
     const dataUrl = canvas.toDataURL('image/png');
-    const embedHtml = `<div class="cloudnotes-drawing my-3"><img src="${dataUrl}" alt="Handwritten Sketch" class="rounded-xl border border-slate-700 max-w-full" /></div>`;
+    const embedHtml = `<div class="cloudnotes-drawing my-3"><img src="${dataUrl}" alt="Handwritten Sketch" class="rounded-lg border border-slate-700 max-w-full" /></div>`;
     onSave(embedHtml);
     onClose();
   };
@@ -136,95 +136,99 @@ export const DrawingCanvasModal: React.FC<DrawingCanvasModalProps> = ({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md">
-      <div className="relative w-full max-w-2xl rounded-3xl glass-panel p-6 border border-slate-700/60 shadow-2xl">
-        <div className="flex items-center justify-between pb-4 border-b border-slate-800">
-          <div className="flex items-center space-x-2">
-            <div className="p-2 rounded-xl bg-amber-500/10 text-amber-400">
-              <PenTool className="w-5 h-5" />
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-modal-in">
+      <div className="relative w-full max-w-2xl rounded-2xl modal-surface p-6 text-left select-none">
+        <div className="flex items-start justify-between pb-4 border-b border-slate-200 dark:border-neutral-800">
+          <div className="flex items-center space-x-3">
+            <div className="w-8 h-8 rounded-lg bg-amber-500/10 text-amber-500 dark:text-amber-400 border border-amber-500/20 flex items-center justify-center">
+              <PenTool className="w-4 h-4" />
             </div>
             <div>
-              <h3 className="font-bold text-slate-100 text-base">Freehand Doodle & Sketch</h3>
-              <p className="text-xs text-slate-400">Draw notes, diagrams, and handwriting</p>
+              <h3 className="font-semibold text-slate-900 dark:text-neutral-100 text-sm tracking-tight">Freehand Sketch Canvas</h3>
+              <p className="text-xs text-slate-500 dark:text-neutral-400">Draw diagrams, signatures, or quick handwriting</p>
             </div>
           </div>
-          <button onClick={onClose} className="p-2 rounded-xl text-slate-400 hover:text-white hover:bg-slate-800">
-            <X className="w-5 h-5" />
+          <button 
+            onClick={onClose} 
+            className="p-1.5 rounded-lg text-slate-400 hover:text-slate-800 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-[#202126] transition-colors"
+            aria-label="Close"
+          >
+            <X className="w-4 h-4" />
           </button>
         </div>
 
-        {/* Canvas Toolbar */}
         <div className="flex flex-wrap items-center justify-between gap-3 py-3">
           <div className="flex items-center space-x-2">
-            {['#F59E0B', '#10B981', '#3B82F6', '#F43F5E', '#FFFFFF', '#64748B'].map((color) => (
-              <button
-                key={color}
-                type="button"
-                onClick={() => setBrushColor(color)}
-                className={`w-6 h-6 rounded-full border-2 transition-all ${brushColor === color ? 'border-white scale-110 shadow-md' : 'border-transparent'}`}
-                style={{ backgroundColor: color }}
-              />
-            ))}
+            <span className="text-[11px] font-mono text-slate-500 dark:text-neutral-400">Color:</span>
+            <div className="flex items-center space-x-1.5">
+              {['#F59E0B', '#10B981', '#3B82F6', '#F43F5E', '#FFFFFF', '#64748B'].map((color) => (
+                <button
+                  key={color}
+                  type="button"
+                  onClick={() => setBrushColor(color)}
+                  className={`w-4 h-4 rounded-full transition-transform ${brushColor === color ? 'ring-2 ring-amber-500 dark:ring-white ring-offset-2 ring-offset-slate-100 dark:ring-offset-[#141518] scale-110' : 'opacity-70 hover:opacity-100'}`}
+                  style={{ backgroundColor: color }}
+                />
+              ))}
+            </div>
           </div>
 
-          <div className="flex items-center space-x-3">
-            <label className="text-xs text-slate-400">Stroke:</label>
+          <div className="flex items-center space-x-2">
+            <label className="text-[11px] font-mono text-slate-500 dark:text-neutral-400">Stroke:</label>
             <input
               type="range"
               min="1"
               max="12"
               value={brushWidth}
               onChange={(e) => setBrushWidth(Number(e.target.value))}
-              className="w-20 accent-amber-500"
+              className="w-18 accent-amber-500 h-1 bg-slate-300 dark:bg-neutral-800 rounded"
             />
           </div>
 
-          <div className="flex items-center space-x-1.5">
+          <div className="flex items-center space-x-1">
             <button
               onClick={handleUndo}
               disabled={strokes.length === 0}
-              className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 disabled:opacity-40"
-              title="Undo"
+              className="p-1.5 rounded-md bg-slate-100 dark:bg-[#1c1d22] border border-slate-300 dark:border-neutral-800 hover:bg-slate-200 dark:hover:bg-[#25262c] text-slate-700 dark:text-neutral-300 disabled:opacity-30 transition-colors"
+              title="Undo last stroke"
             >
-              <Undo className="w-4 h-4" />
+              <Undo className="w-3.5 h-3.5" />
             </button>
             <button
               onClick={handleClear}
-              className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300"
-              title="Clear"
+              className="p-1.5 rounded-md bg-slate-100 dark:bg-[#1c1d22] border border-slate-300 dark:border-neutral-800 hover:bg-slate-200 dark:hover:bg-[#25262c] text-slate-700 dark:text-neutral-300 transition-colors"
+              title="Clear entire canvas"
             >
-              <RotateCcw className="w-4 h-4" />
+              <RotateCcw className="w-3.5 h-3.5" />
             </button>
           </div>
         </div>
 
-        {/* Canvas Area */}
-        <div className="w-full flex justify-center bg-slate-950/80 rounded-2xl border border-slate-800 p-2 overflow-hidden">
+        <div className="w-full flex justify-center bg-slate-100 dark:bg-[#121214] rounded-xl border border-slate-300 dark:border-neutral-800 p-2 overflow-hidden">
           <canvas
             ref={canvasRef}
             onMouseDown={startDrawing}
             onMouseMove={draw}
             onMouseUp={stopDrawing}
             onMouseLeave={stopDrawing}
-            className="cursor-crosshair w-full max-w-[600px] h-[360px] touch-none rounded-xl"
+            className="cursor-crosshair w-full max-w-[600px] h-[360px] touch-none rounded-lg"
             style={{ width: '600px', height: '360px' }}
           />
         </div>
 
-        {/* Actions */}
-        <div className="mt-4 flex justify-end space-x-3">
+        <div className="mt-4 pt-3 border-t border-slate-200 dark:border-neutral-800 flex justify-end space-x-2">
           <button
             onClick={onClose}
-            className="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-sm font-medium"
+            className="px-3.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-medium transition-colors"
           >
             Cancel
           </button>
           <button
             onClick={handleSaveAndEmbed}
-            className="flex items-center space-x-2 px-5 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 text-sm font-bold shadow-lg shadow-amber-500/20"
+            className="flex items-center space-x-1.5 px-4 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-semibold transition-colors"
           >
-            <Check className="w-4 h-4 stroke-[3]" />
-            <span>Insert to Note</span>
+            <Check className="w-3.5 h-3.5 stroke-[2.5]" />
+            <span>Insert Sketch</span>
           </button>
         </div>
       </div>

@@ -15,14 +15,12 @@ export function useNotes() {
   const [notes, setNotes] = useState<LocalNote[]>(() => getCachedNotes());
   const [syncStatus, setSyncStatus] = useState<'synced' | 'syncing' | 'offline'>('synced');
   const [searchQuery, setSearchQuery] = useState<string>('');
-  const [selectedTag, setSelectedTag] = useState<string>('all'); // 'all' | 'archived'
+  const [selectedTag, setSelectedTag] = useState<string>('home');
 
-  // Save to localStorage whenever notes update
   useEffect(() => {
     setCachedNotes(notes);
   }, [notes]);
 
-  // Fetch from PocketBase
   const syncWithServer = useCallback(async () => {
     if (!pb.authStore.isValid) {
       setSyncStatus('offline');
@@ -70,7 +68,6 @@ export function useNotes() {
         const localMap = new Map<string, LocalNote>(prevNotes.map(n => [n.id, n]));
         const updatedList: LocalNote[] = [];
 
-        // Process remote notes
         for (const remote of records) {
           const existing = localMap.get(remote.id);
           if (!existing) {
@@ -135,7 +132,6 @@ export function useNotes() {
     };
   }, [syncWithServer]);
 
-  // Create or Update Note
   const saveNote = useCallback(async (noteData: Partial<Note> & { id?: string }, lockPin?: string) => {
     const isNew = !noteData.id;
     const noteId = noteData.id || `local_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
@@ -177,7 +173,6 @@ export function useNotes() {
       return [localNote, ...prev];
     });
 
-    // Try to sync with PocketBase immediately
     if (pb.authStore.isValid) {
       try {
         const payload = localNoteToNote(localNote, pb.authStore.model?.id);
@@ -194,7 +189,6 @@ export function useNotes() {
     }
   }, []);
 
-  // Soft Delete Note -> Moves to Trash
   const moveToTrash = useCallback(async (noteId: string) => {
     const now = new Date().toISOString();
     setNotes(prev => prev.map(n => {
@@ -223,7 +217,6 @@ export function useNotes() {
     }
   }, []);
 
-  // Restore Note from Trash
   const restoreFromTrash = useCallback(async (noteId: string) => {
     const now = new Date().toISOString();
     setNotes(prev => prev.map(n => {
@@ -252,7 +245,6 @@ export function useNotes() {
     }
   }, []);
 
-  // Permanent Hard Delete
   const permanentlyDelete = useCallback(async (noteId: string) => {
     setNotes(prev => prev.filter(n => n.id !== noteId));
 
@@ -265,7 +257,6 @@ export function useNotes() {
     }
   }, []);
 
-  // Empty Entire Trash
   const emptyTrash = useCallback(async () => {
     const trashItems = notes.filter(n => n.is_deleted === 1);
     setNotes(prev => prev.filter(n => n.is_deleted === 0));
@@ -279,11 +270,18 @@ export function useNotes() {
     }
   }, [notes]);
 
-  // Partitioned views
   const activeNotes = useMemo(() => {
     return notes
       .filter(n => n.is_deleted === 0)
-      .filter(n => selectedTag === 'archived' ? n.is_archived === 1 : n.is_archived === 0)
+      .filter(n => {
+        if (selectedTag === 'vault') {
+          return n.is_archived === 0 && Boolean(n.is_locked);
+        }
+        if (selectedTag === 'archive' || selectedTag === 'archived') {
+          return Boolean(n.is_archived);
+        }
+        return n.is_archived === 0;
+      })
       .filter(n => {
         if (!searchQuery.trim()) return true;
         const q = searchQuery.toLowerCase();
