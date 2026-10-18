@@ -31,6 +31,37 @@ export function useNotes() {
 
     try {
       setSyncStatus('syncing');
+
+      // 1. Process pending offline notes first
+      const currentNotes = getCachedNotes();
+      for (const local of currentNotes) {
+        if (local.sync_status === 'pending_upload') {
+          const remotePayload = localNoteToNote(local, pb.authStore.model?.id);
+          if (local.id.startsWith('local_')) {
+            try {
+              const created = await pb.collection('notes').create<Note>(remotePayload);
+              setNotes(prev => prev.map(n => n.id === local.id ? noteToLocalNote(created, 'synced') : n));
+            } catch (err) {
+              console.warn('Failed to create offline note on server:', err);
+            }
+          } else {
+            try {
+              const updated = await pb.collection('notes').update<Note>(local.id, remotePayload);
+              setNotes(prev => prev.map(n => n.id === local.id ? noteToLocalNote(updated, 'synced') : n));
+            } catch (err) {
+              console.warn('Failed to update note on server:', err);
+            }
+          }
+        } else if (local.sync_status === 'pending_delete' && !local.id.startsWith('local_')) {
+          try {
+            await pb.collection('notes').delete(local.id);
+          } catch (err) {
+            console.warn('Failed to delete note on server:', err);
+          }
+        }
+      }
+
+      // 2. Fetch all remote notes
       const records = await pb.collection('notes').getFullList<Note>({
         sort: '-client_updated_at',
       });
@@ -49,7 +80,6 @@ export function useNotes() {
             if (resolution.action === 'update_local_from_remote') {
               updatedList.push(resolution.updatedLocal);
             } else if (resolution.action === 'push_local_to_remote') {
-              // Push local updates to server in background
               pb.collection('notes').update(remote.id, resolution.noteToPush).catch(console.error);
               updatedList.push({ ...existing, sync_status: 'synced' });
             } else {
@@ -59,17 +89,9 @@ export function useNotes() {
           }
         }
 
-        // Anti-data-loss: Keep local notes that haven't been pushed or were created offline
+        // Anti-data-loss: Keep local notes that haven't been pushed yet (e.g. offline created)
         for (const [_, remaining] of localMap) {
-          if (remaining.sync_status === 'pending_upload') {
-            const remotePayload = localNoteToNote(remaining, pb.authStore.model?.id);
-            pb.collection('notes').create(remotePayload).catch(console.error);
-            updatedList.push({ ...remaining, sync_status: 'synced' });
-          } else if (remaining.sync_status === 'pending_delete') {
-            // Delete from server if it existed
-            pb.collection('notes').delete(remaining.id).catch(() => {});
-          } else {
-            // Anti-hard-delete hazard: keep existing synced notes
+          if (remaining.sync_status === 'pending_upload' || remaining.id.startsWith('local_')) {
             updatedList.push(remaining);
           }
         }

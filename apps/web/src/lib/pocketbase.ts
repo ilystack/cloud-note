@@ -17,10 +17,12 @@ export function setActiveServerUrl(url: string): void {
   if (typeof window !== 'undefined') {
     localStorage.setItem(STORAGE_KEY_SERVER_URL, url.trim());
     pb = new PocketBase(url.trim());
+    pb.autoCancellation(false);
   }
 }
 
 export let pb = new PocketBase(getActiveServerUrl());
+pb.autoCancellation(false);
 
 /**
  * Health check endpoint for testing connection

@@ -14,6 +14,7 @@ export async function getPocketBase(): Promise<PocketBase> {
       serverUrl = DEFAULT_SERVER_URL;
     }
     mobilePb = new PocketBase(serverUrl.trim());
+    mobilePb.autoCancellation(false);
 
     // Restore auth token if saved
     const token = await SecureStore.getItemAsync(SECURE_KEY_AUTH_TOKEN);
@@ -35,6 +36,7 @@ export async function getPocketBase(): Promise<PocketBase> {
 export async function setServerUrl(url: string): Promise<void> {
   await SecureStore.setItemAsync(SECURE_KEY_SERVER_URL, url.trim());
   mobilePb = new PocketBase(url.trim());
+  mobilePb.autoCancellation(false);
 }
 
 export async function testServerConnection(url: string): Promise<{ ok: boolean; message: string }> {
