@@ -2,7 +2,10 @@
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
     "target": "ES2022",
-    "lib": ["ES2022", "DOM"],
+    "lib": [
+      "ES2022",
+      "DOM"
+    ],
     "module": "ESNext",
     "moduleResolution": "bundler",
     "jsx": "react-native",
@@ -10,10 +13,14 @@
     "skipLibCheck": true,
     "baseUrl": ".",
     "paths": {
-      "@/*": ["src/*"]
+      "@/*": [
+        "src/*"
+      ]
     }
   },
   "include": [
-    "src/**/*"
+    "src/**/*",
+    ".expo/types/**/*.ts",
+    "expo-env.d.ts"
   ]
 }

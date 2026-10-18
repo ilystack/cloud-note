@@ -132,7 +132,7 @@ export function localNoteToNote(local: LocalNote, userId?: string): Note {
     }
   }
 
-  return {
+  const note: Note = {
     id: local.id,
     user_id: userId,
     title: local.title,
@@ -149,4 +149,11 @@ export function localNoteToNote(local: LocalNote, userId?: string): Note {
     client_updated_at: local.client_updated_at,
     updated: local.updated_at,
   };
+
+  // If id is a temporary local ID, omit it so PocketBase auto-generates a valid 15-char record ID
+  if (!local.id || local.id.startsWith('local_') || local.id.length !== 15) {
+    delete (note as any).id;
+  }
+
+  return note;
 }

@@ -8,7 +8,7 @@
     "apps/*"
   ],
   "scripts": {
-    "server": ".\\database\\pocketbase.exe serve --dir=database/pb_data --publicDir=database/pb_public --migrationsDir=database/pb_migrations",
+    "server": ".\\database\\pocketbase.exe serve --http=0.0.0.0:8090 --dir=database/pb_data --publicDir=database/pb_public --migrationsDir=database/pb_migrations",
     "dev:web": "npm run dev --workspace=apps/web",
     "build:web": "npm run build --workspace=apps/web",
     "dev:mobile": "npm run start --workspace=apps/mobile",
@@ -17,7 +17,19 @@
     "postinstall": "node apps/mobile/scripts/patch-expo-sqlite.js"
   },
   "devDependencies": {
+    "@types/react": "~18.2.45",
+    "@types/react-dom": "~18.2.18",
     "typescript": "^5.5.4",
     "vitest": "^2.1.8"
+  },
+  "overrides": {
+    "react": "18.2.0",
+    "react-dom": "18.2.0",
+    "@types/react": "~18.2.45",
+    "@types/react-dom": "~18.2.18"
+  },
+  "dependencies": {
+    "react": "18.2.0",
+    "react-dom": "18.2.0"
   }
 }
