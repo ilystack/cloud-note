@@ -1,43 +1,51 @@
 import React from 'react';
 import { 
-  Search, 
   RefreshCw, 
   CloudOff, 
   CloudCheck,
-  X,
   Pen
 } from 'lucide-react';
 import { pb } from '../lib/pocketbase';
 
+export const FILTER_TABS = [
+  { id: 'home', label: 'Home' },
+  { id: 'vault', label: 'Vault' },
+  { id: 'archive', label: 'Archive' },
+] as const;
+
 interface HeaderProps {
-  searchQuery: string;
-  onSearchChange: (val: string) => void;
+  selectedTag: string;
+  onSelectTag: (tag: string) => void;
   syncStatus: 'synced' | 'syncing' | 'offline';
   onSyncClick: () => void;
   onOpenProfile: () => void;
+  onRequireAuth: (action: () => void) => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
-  searchQuery,
-  onSearchChange,
+  selectedTag,
+  onSelectTag,
   syncStatus,
   onSyncClick,
   onOpenProfile,
+  onRequireAuth,
 }) => {
   const user = pb.authStore.model;
   const userName = user?.name || (user?.email ? user.email.split('@')[0] : 'user');
+  const isLoggedIn = pb.authStore.isValid;
+  const activeTabIndex = Math.max(0, FILTER_TABS.findIndex((t) => t.id === selectedTag));
 
   return (
     <header className="sticky top-0 z-40 header-surface w-full">
-      <div className="max-w-7xl mx-auto px-4 sm:px-8 py-3.5 flex items-center justify-between gap-4">
-        <div className="flex items-center select-none flex-shrink-0">
+      <div className="max-w-7xl mx-auto px-4 sm:px-8 py-3.5 flex items-start justify-between gap-4">
+        <div className="flex items-start select-none flex-shrink-0">
           <div className="flex items-baseline space-x-0.5">
-            <span className="text-xl sm:text-2xl font-extrabold text-slate-900 dark:text-slate-100 tracking-tight">
+            <span className="text-xl sm:text-2xl font-extrabold text-slate-900 dark:text-slate-100 tracking-tight leading-none">
               Cloud
             </span>
-            <span className="relative text-xl sm:text-2xl font-extrabold text-amber-500 dark:text-amber-400 tracking-tight inline-block pr-3.5">
+            <span className="relative text-xl sm:text-2xl font-extrabold text-amber-500 dark:text-amber-400 tracking-tight leading-none inline-block pr-3.5">
               Notes
-              <span className="absolute -bottom-1 left-0 right-3.5 h-3 pointer-events-none overflow-visible">
+              <span className="absolute -bottom-2 left-0 right-3.5 h-3 pointer-events-none overflow-visible">
                 <svg 
                   className="w-full h-full overflow-visible" 
                   viewBox="0 0 100 12" 
@@ -58,7 +66,7 @@ export const Header: React.FC<HeaderProps> = ({
                     strokeWidth="1.2" 
                     strokeLinecap="round" 
                     opacity="0.6" 
-                    pathLength="100"
+                    pathLength="100" 
                     className="text-amber-500 dark:text-amber-400 animate-draw-line"
                   />
                 </svg>
@@ -71,32 +79,52 @@ export const Header: React.FC<HeaderProps> = ({
           </div>
         </div>
 
-        <div className="flex-1 max-w-lg mx-2 sm:mx-6">
-          <div className="relative w-full">
-            <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 dark:text-neutral-500 pointer-events-none" />
-            <input
-              type="text"
-              value={searchQuery}
-              onChange={(e) => onSearchChange(e.target.value)}
-              placeholder="Search notes..."
-              className="w-full pl-10 pr-10 py-2 rounded-xl bg-slate-100/90 dark:bg-[#141518] border border-slate-300/80 dark:border-neutral-800 text-xs sm:text-sm text-slate-900 dark:text-neutral-200 placeholder-slate-400 dark:placeholder-neutral-500 focus:outline-none focus:border-amber-500/70 focus:ring-1 focus:ring-amber-500/30 transition-colors"
+        {/* Center: Filter Tabs Pill with Smooth Floating Slider */}
+        <div className="flex-1 flex justify-center items-start pt-1.5 select-none mx-2 sm:mx-6">
+          <div className="relative inline-flex items-center p-1 rounded-full">
+            <div
+              className="absolute left-1 top-1 bottom-1 w-20 sm:w-24 rounded-full bg-white dark:bg-[#202126] shadow-sm border border-slate-200/90 dark:border-neutral-700/80 transition-transform duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] pointer-events-none"
+              style={{
+                transform: `translateX(${activeTabIndex * 100}%)`,
+              }}
             />
-            {searchQuery && (
-              <button
-                onClick={() => onSearchChange('')}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:text-neutral-400 dark:hover:text-neutral-200 p-0.5 cursor-pointer"
-                title="Clear search"
-              >
-                <X className="w-3.5 h-3.5" />
-              </button>
-            )}
+
+            {FILTER_TABS.map((tab) => {
+              const isActive = selectedTag === tab.id;
+              const isLockedTab = !isLoggedIn && tab.id !== 'home';
+
+              return (
+                <button
+                  key={tab.id}
+                  onClick={() => {
+                    if (tab.id === 'home') {
+                      onSelectTag('home');
+                    } else {
+                      onRequireAuth(() => onSelectTag(tab.id));
+                    }
+                  }}
+                  className={`w-20 sm:w-24 py-1.5 text-center text-xs sm:text-sm font-medium rounded-full relative z-10 transition-all duration-200 cursor-pointer ${
+                    isLockedTab ? 'opacity-60 hover:opacity-85' : ''
+                  } ${
+                    isActive
+                      ? tab.id === 'vault'
+                        ? 'text-amber-600 dark:text-amber-400 font-semibold'
+                        : 'text-slate-900 dark:text-neutral-100 font-semibold'
+                      : 'text-slate-500 hover:text-slate-800 dark:text-neutral-400 dark:hover:text-neutral-200'
+                  }`}
+                  title={isLockedTab ? `Sign in to access ${tab.label}` : tab.label}
+                >
+                  {tab.label}
+                </button>
+              );
+            })}
           </div>
         </div>
 
         <div className="flex items-center space-x-2.5 flex-shrink-0">
           <button
             onClick={onSyncClick}
-            className="flex items-center space-x-1.5 px-2.5 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-[#141518] dark:hover:bg-[#1f2025] border border-slate-300/80 dark:border-neutral-800 text-xs transition-colors cursor-pointer"
+            className="flex items-center space-x-1.5 px-2.5 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-[#141518] dark:hover:bg-[#1f2025] border border-slate-300/80 dark:border-neutral-800 text-xs transition-colors cursor-pointer select-none"
             title={
               pb.authStore.isValid 
                 ? `Sync status: ${syncStatus}. Click to trigger sync.` 
@@ -124,7 +152,7 @@ export const Header: React.FC<HeaderProps> = ({
 
           <button
             onClick={onOpenProfile}
-            className="group flex items-center space-x-2.5 p-1 sm:pl-3 sm:pr-1.5 rounded-full bg-slate-100 hover:bg-slate-200 dark:bg-[#141518] dark:hover:bg-[#1f2025] border border-slate-300/80 dark:border-neutral-800 hover:border-slate-400/80 dark:hover:border-neutral-700 transition-colors cursor-pointer"
+            className="group flex items-center space-x-2.5 p-1 sm:pl-3 sm:pr-1.5 rounded-full bg-slate-100 hover:bg-slate-200 dark:bg-[#141518] dark:hover:bg-[#1f2025] border border-slate-300/80 dark:border-neutral-800 hover:border-slate-400/80 dark:hover:border-neutral-700 transition-colors cursor-pointer select-none"
             title="Account & Vault Settings"
           >
             <span className="hidden sm:inline text-xs font-medium text-slate-600 dark:text-neutral-300 group-hover:text-amber-600 dark:group-hover:text-amber-300 transition-colors font-sans">
@@ -135,7 +163,7 @@ export const Header: React.FC<HeaderProps> = ({
               )}
             </span>
 
-            <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-amber-600 to-amber-400 text-slate-950 font-bold text-xs flex items-center justify-center">
+            <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-amber-600 to-amber-400 text-slate-950 font-bold text-xs flex items-center justify-center flex-shrink-0">
               {pb.authStore.isValid ? userName.charAt(0).toUpperCase() : '?'}
             </div>
           </button>

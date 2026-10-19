@@ -38,7 +38,13 @@ export function useNotes() {
           if (local.id.startsWith('local_')) {
             try {
               const created = await pb.collection('notes').create<Note>(remotePayload);
-              setNotes(prev => prev.map(n => n.id === local.id ? noteToLocalNote(created, 'synced') : n));
+              setNotes(prev => {
+                const hasCreated = prev.some(n => n.id === created.id);
+                if (hasCreated) {
+                  return prev.filter(n => n.id !== local.id);
+                }
+                return prev.map(n => n.id === local.id ? noteToLocalNote(created, 'synced') : n);
+              });
             } catch (err) {
               console.warn('Failed to create offline note on server:', err);
             }
@@ -89,7 +95,10 @@ export function useNotes() {
         // Anti-data-loss: Keep local notes that haven't been pushed yet (e.g. offline created)
         for (const [_, remaining] of localMap) {
           if (remaining.sync_status === 'pending_upload' || remaining.id.startsWith('local_')) {
-            updatedList.push(remaining);
+            const alreadySynced = records.some(r => r.client_updated_at === remaining.client_updated_at);
+            if (!alreadySynced) {
+              updatedList.push(remaining);
+            }
           }
         }
 
@@ -119,6 +128,18 @@ export function useNotes() {
               updated[idx] = local;
               return updated;
             }
+
+            // Check if there is an optimistic pending local note that matches this newly created remote record
+            const pendingIdx = prev.findIndex(n => 
+              n.id.startsWith('local_') && 
+              (n.client_updated_at === remote.client_updated_at || n.title === remote.title)
+            );
+            if (pendingIdx >= 0) {
+              const updated = [...prev];
+              updated[pendingIdx] = local;
+              return updated;
+            }
+
             return [local, ...prev];
           });
         } else if (e.action === 'delete') {
@@ -178,7 +199,14 @@ export function useNotes() {
         const payload = localNoteToNote(localNote, pb.authStore.model?.id);
         if (isNew || noteId.startsWith('local_')) {
           const created = await pb.collection('notes').create<Note>(payload);
-          setNotes(prev => prev.map(n => n.id === noteId ? noteToLocalNote(created, 'synced') : n));
+          setNotes(prev => {
+            const alreadyHasServerRecord = prev.some(n => n.id === created.id);
+            if (alreadyHasServerRecord) {
+              // Remote record was already inserted or updated by the Realtime SSE event, prune the temporary local note
+              return prev.filter(n => n.id !== noteId);
+            }
+            return prev.map(n => n.id === noteId ? noteToLocalNote(created, 'synced') : n);
+          });
         } else {
           const updated = await pb.collection('notes').update<Note>(noteId, payload);
           setNotes(prev => prev.map(n => n.id === noteId ? noteToLocalNote(updated, 'synced') : n));
@@ -271,7 +299,13 @@ export function useNotes() {
   }, [notes]);
 
   const activeNotes = useMemo(() => {
+    const seen = new Set<string>();
     return notes
+      .filter(n => {
+        if (seen.has(n.id)) return false;
+        seen.add(n.id);
+        return true;
+      })
       .filter(n => n.is_deleted === 0)
       .filter(n => {
         if (selectedTag === 'vault') {
@@ -291,7 +325,13 @@ export function useNotes() {
   }, [notes, selectedTag, searchQuery]);
 
   const deletedNotes = useMemo(() => {
+    const seen = new Set<string>();
     return notes
+      .filter(n => {
+        if (seen.has(n.id)) return false;
+        seen.add(n.id);
+        return true;
+      })
       .filter(n => n.is_deleted === 1)
       .sort((a, b) => new Date(b.deleted_at || b.client_updated_at).getTime() - new Date(a.deleted_at || a.client_updated_at).getTime());
   }, [notes]);

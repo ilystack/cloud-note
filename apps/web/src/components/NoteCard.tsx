@@ -70,18 +70,23 @@ export const NoteCard: React.FC<NoteCardProps> = ({
     }
   }
 
-  const updatedDate = new Date(note.client_updated_at);
+  const updatedDate = new Date(note.client_updated_at || note.updated_at);
   const now = new Date();
-  const diffDays = Math.floor((now.getTime() - updatedDate.getTime()) / (1000 * 60 * 60 * 24));
-  
-  let formattedDate: string;
-  if (diffDays === 0) {
-    formattedDate = updatedDate.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
-  } else if (diffDays < 7) {
-    formattedDate = updatedDate.toLocaleDateString(undefined, { weekday: 'short' });
-  } else {
-    formattedDate = updatedDate.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
-  }
+  const isSameYear = now.getFullYear() === updatedDate.getFullYear();
+
+  const timeStr = updatedDate.toLocaleTimeString('en-GB', {
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  });
+
+  const dateStr = updatedDate.toLocaleDateString('en-US', {
+    month: 'short',
+    day: 'numeric',
+    ...(isSameYear ? {} : { year: 'numeric' }),
+  });
+
+  const formattedDate = `${dateStr}, ${timeStr}`;
 
   const rawExcerpt = note.excerpt || note.content || '';
   const cleanExcerpt = cleanMarkdownExcerpt(rawExcerpt);

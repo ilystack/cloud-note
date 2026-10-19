@@ -124,7 +124,7 @@ export const TrashGalleryModal: React.FC<TrashGalleryModalProps> = ({
               const palette = getPaletteByColor(note.cover_color);
               const isLocked = Boolean(note.is_locked);
               const deletedDate = note.deleted_at
-                ? new Date(note.deleted_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
+                ? new Date(note.deleted_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false })
                 : 'Recently';
 
               return (

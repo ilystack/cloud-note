@@ -9,15 +9,9 @@ import { AiAssistantModal } from './components/AiAssistantModal';
 import { ServerConnectionModal } from './components/ServerConnectionModal';
 import { ProfileModal } from './components/ProfileModal';
 import { LocalNote } from '@cloudnotes/shared-types';
-import { Plus, Bot, Trash2 } from 'lucide-react';
+import { Plus, Bot, Trash2, Search, X } from 'lucide-react';
 import { pb } from './lib/pocketbase';
 import { useTheme } from './hooks/useTheme';
-
-const FILTER_TABS = [
-  { id: 'home', label: 'Home' },
-  { id: 'vault', label: 'Vault' },
-  { id: 'archive', label: 'Archive' },
-] as const;
 
 export const App: React.FC = () => {
   const { theme, toggleTheme } = useTheme();
@@ -83,16 +77,12 @@ export const App: React.FC = () => {
     action();
   };
 
-  const activeTabIndex = Math.max(
-    0,
-    FILTER_TABS.findIndex((tab) => tab.id === selectedTag)
-  );
-
   return (
     <div className="min-h-screen bg-[var(--bg-main)] text-slate-900 dark:text-slate-100 flex flex-col selection:bg-amber-500/25 selection:text-amber-200 relative pb-28 transition-colors duration-200">
       <Header
-        searchQuery={searchQuery}
-        onSearchChange={setSearchQuery}
+        selectedTag={selectedTag}
+        onSelectTag={setSelectedTag}
+        onRequireAuth={requireAuth}
         syncStatus={syncStatus}
         onSyncClick={() => requireAuth(syncWithServer)}
         onOpenProfile={() => {
@@ -105,44 +95,26 @@ export const App: React.FC = () => {
       />
 
       <main className="flex-1 max-w-7xl mx-auto w-full px-4 sm:px-8 py-6">
-        <div className="mb-8 flex justify-center select-none">
-          <div className="relative inline-flex items-center p-1 rounded-full bg-slate-200/80 dark:bg-[#17181c] border border-slate-300/80 dark:border-neutral-800 transition-colors">
-            <div
-              className="absolute left-1 top-1 bottom-1 w-24 sm:w-28 rounded-full bg-white dark:bg-[#25262c] border border-slate-300/80 dark:border-neutral-700/80 transition-transform duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] pointer-events-none"
-              style={{
-                transform: `translateX(${activeTabIndex * 100}%)`,
-              }}
+        {/* Center Search Bar */}
+        <div className="-mt-4 sm:mt-2 mb-10 max-w-lg mx-auto w-full px-2 sm:px-0">
+          <div className="relative w-full">
+            <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 dark:text-neutral-500 pointer-events-none" />
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Search notes..."
+              className="w-full pl-10 pr-10 py-2.5 rounded-xl bg-slate-100/90 dark:bg-[#141518] border border-slate-300/80 dark:border-neutral-800 text-xs sm:text-sm text-slate-900 dark:text-neutral-200 placeholder-slate-400 dark:placeholder-neutral-500 focus:outline-none focus:border-amber-500/70 focus:ring-1 focus:ring-amber-500/30 transition-colors shadow-sm"
             />
-
-            {FILTER_TABS.map((tab) => {
-              const isActive = selectedTag === tab.id;
-              const isLockedTab = !isLoggedIn && tab.id !== 'home';
-
-              return (
-                <button
-                  key={tab.id}
-                  onClick={() => {
-                    if (tab.id === 'home') {
-                      setSelectedTag('home');
-                    } else {
-                      requireAuth(() => setSelectedTag(tab.id));
-                    }
-                  }}
-                  className={`w-24 sm:w-28 py-2 text-center text-sm font-medium rounded-full relative z-10 transition-all duration-200 cursor-pointer ${
-                    isLockedTab ? 'opacity-60 hover:opacity-85' : ''
-                  } ${
-                    isActive
-                      ? tab.id === 'vault'
-                        ? 'text-amber-600 dark:text-amber-400 font-semibold'
-                        : 'text-slate-900 dark:text-neutral-100 font-semibold'
-                      : 'text-slate-500 hover:text-slate-800 dark:text-neutral-400 dark:hover:text-neutral-200'
-                  }`}
-                  title={isLockedTab ? `Sign in to access ${tab.label}` : tab.label}
-                >
-                  {tab.label}
-                </button>
-              );
-            })}
+            {searchQuery && (
+              <button
+                onClick={() => setSearchQuery('')}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:text-neutral-400 dark:hover:text-neutral-200 p-0.5 cursor-pointer"
+                title="Clear search"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            )}
           </div>
         </div>
 
