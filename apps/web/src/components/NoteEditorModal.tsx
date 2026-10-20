@@ -137,6 +137,31 @@ export const NoteEditorModal: React.FC<NoteEditorModalProps> = ({
   const currentStroke = useRef<Point[]>([]);
   const isPainting = useRef<boolean>(false);
 
+  // Lock body scroll while editor modal is open
+  useEffect(() => {
+    if (!isOpen) return;
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = prevOverflow;
+    };
+  }, [isOpen]);
+
+  // Keyboard Escape listener
+  useEffect(() => {
+    if (!isOpen) return;
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        if (isPinModalOpen || showDeleteConfirm || isColorWheelOpen) return;
+        onClose();
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isOpen, isPinModalOpen, showDeleteConfirm, isColorWheelOpen, onClose]);
+
   const [wordCount, setWordCount] = useState<number>(0);
 
   const calculateWordCount = useCallback(() => {
@@ -657,9 +682,6 @@ export const NoteEditorModal: React.FC<NoteEditorModalProps> = ({
   return (
     <>
       <div 
-        onClick={(e) => {
-          if (e.target === e.currentTarget) onClose();
-        }}
         className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-6 bg-black/80 backdrop-blur-sm overflow-y-auto"
       >
         <div className="relative w-full max-w-4xl rounded-2xl modal-surface flex flex-col max-h-[92vh] overflow-hidden animate-modal-in">

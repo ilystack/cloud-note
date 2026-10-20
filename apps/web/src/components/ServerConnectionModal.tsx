@@ -64,6 +64,7 @@ export const ServerConnectionModal: React.FC<ServerConnectionModalProps> = ({
     try {
       if (authMode === 'login') {
         await pb.collection('users').authWithPassword(email.trim(), password);
+        setSessionUnlockedPin(null);
         setAuthMessage({ type: 'success', text: 'Connected and logged in successfully.' });
         onAuthChange();
         setTimeout(onClose, 600);
@@ -79,10 +80,10 @@ export const ServerConnectionModal: React.FC<ServerConnectionModalProps> = ({
         });
         await pb.collection('users').authWithPassword(email.trim(), password);
 
-        // Store Vault PIN hash and unlock current session
+        // Store Vault PIN hash, but keep vault locked until explicitly unlocked
         const hashedPin = await hashPin(vaultPin);
         setStoredPinHash(hashedPin);
-        setSessionUnlockedPin(vaultPin);
+        setSessionUnlockedPin(null);
 
         setAuthMessage({ type: 'success', text: 'Account created with Vault PIN.' });
         onAuthChange();

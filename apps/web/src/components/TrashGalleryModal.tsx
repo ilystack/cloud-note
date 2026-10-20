@@ -34,9 +34,6 @@ export const TrashGalleryModal: React.FC<TrashGalleryModalProps> = ({
 
   return (
     <div 
-      onClick={(e) => {
-        if (e.target === e.currentTarget) onClose();
-      }}
       className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 bg-black/80 backdrop-blur-sm animate-modal-in overflow-y-auto"
     >
       <div className="relative w-full max-w-4xl rounded-2xl modal-surface flex flex-col max-h-[88vh] overflow-hidden text-left shadow-2xl">

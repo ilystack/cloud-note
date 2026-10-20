@@ -1,7 +1,7 @@
 import React from 'react';
 import { 
   X, 
-  Shield, 
+  Lock, 
   Server, 
   LogOut, 
   ChevronRight,
@@ -40,9 +40,6 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
 
   return (
     <div 
-      onClick={(e) => {
-        if (e.target === e.currentTarget) onClose();
-      }}
       className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-modal-in"
     >
       <div 
@@ -131,7 +128,7 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
           >
             <div className="flex items-center space-x-3">
               <div className="w-8 h-8 rounded-lg bg-amber-500/10 text-amber-500 dark:text-amber-400 border border-amber-500/20 flex items-center justify-center">
-                <Shield className="w-4 h-4" />
+                <Lock className="w-4 h-4" />
               </div>
               <div>
                 <span className="text-xs font-semibold text-slate-800 dark:text-neutral-200 block group-hover:text-amber-600 dark:group-hover:text-amber-300 transition-colors">

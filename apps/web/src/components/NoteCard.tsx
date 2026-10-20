@@ -1,7 +1,7 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   FileText, 
-  Lock, 
+  Unlock,
   Paperclip, 
   Trash2, 
   Archive, 
@@ -13,8 +13,9 @@ import {
   Briefcase,
   ArrowUpRight
 } from 'lucide-react';
-import { LocalNote } from '@cloudnotes/shared-types';
+import { LocalNote, isEncryptedContent, decryptNoteContent } from '@cloudnotes/shared-types';
 import { getPaletteByColor } from '@cloudnotes/design-system';
+import { getSessionUnlockedPin } from '../lib/storage';
 
 interface NoteCardProps {
   note: LocalNote;
@@ -88,8 +89,30 @@ export const NoteCard: React.FC<NoteCardProps> = ({
 
   const formattedDate = `${dateStr}, ${timeStr}`;
 
+  const [decryptedText, setDecryptedText] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (isLocked && isEncryptedContent(note.content)) {
+      const sessionPin = getSessionUnlockedPin();
+      if (sessionPin) {
+        decryptNoteContent(note.content, sessionPin)
+          .then((dec) => {
+            setDecryptedText(cleanMarkdownExcerpt(dec));
+          })
+          .catch(() => {
+            setDecryptedText(null);
+          });
+      } else {
+        setDecryptedText(null);
+      }
+    } else {
+      setDecryptedText(null);
+    }
+  }, [note.content, isLocked]);
+
   const rawExcerpt = note.excerpt || note.content || '';
   const cleanExcerpt = cleanMarkdownExcerpt(rawExcerpt);
+  const displayExcerpt = decryptedText || (rawExcerpt !== '[Encrypted Note]' ? cleanExcerpt : '') || 'No content provided.';
 
   return (
     <article
@@ -126,11 +149,11 @@ export const NoteCard: React.FC<NoteCardProps> = ({
           <div className="flex items-center space-x-1.5">
             {isLocked && (
               <span 
-                className="flex items-center space-x-1 px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-600 dark:text-amber-300 border border-amber-500/20 text-[10px] font-mono"
-                title="End-to-End Encrypted with Stealth PIN"
+                className="flex items-center space-x-1 px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/25 text-[10px] font-mono"
+                title="Unlocked Vault Note"
               >
-                <Lock className="w-3 h-3" />
-                <span className="hidden sm:inline">Encrypted</span>
+                <Unlock className="w-3 h-3 stroke-[2.2]" />
+                <span className="hidden sm:inline">Unlocked</span>
               </span>
             )}
             {attachmentCount > 0 && (
@@ -157,14 +180,7 @@ export const NoteCard: React.FC<NoteCardProps> = ({
         <p className={`mt-2.5 text-xs sm:text-sm text-slate-600 dark:text-neutral-300/95 leading-relaxed font-normal ${
           featured ? 'line-clamp-4' : 'line-clamp-3'
         }`}>
-          {isLocked ? (
-            <span className="italic text-slate-400 dark:text-neutral-400 font-mono text-xs flex items-center space-x-1.5 pt-1">
-              <span className="w-1.5 h-1.5 rounded-full bg-amber-500/60 animate-pulse" />
-              <span>Protected by AES-GCM Client Cryptography</span>
-            </span>
-          ) : (
-            cleanExcerpt || 'No content provided.'
-          )}
+          {displayExcerpt}
         </p>
       </div>
 

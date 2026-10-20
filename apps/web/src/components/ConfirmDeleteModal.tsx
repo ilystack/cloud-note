@@ -36,9 +36,6 @@ export const ConfirmDeleteModal: React.FC<ConfirmDeleteModalProps> = ({
 
   return (
     <div 
-      onClick={(e) => {
-        if (e.target === e.currentTarget) onClose();
-      }}
       className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-modal-in select-none"
       role="dialog"
       aria-modal="true"

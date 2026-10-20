@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNotes } from './hooks/useNotes';
 import { Header } from './components/Header';
 import { BentoGrid } from './components/BentoGrid';
@@ -46,10 +46,42 @@ export const App: React.FC = () => {
   // Vault PIN & Note Protection Modal state
   const [pinModalConfig, setPinModalConfig] = useState<{
     isOpen: boolean;
-    mode: 'setup' | 'unlock_note' | 'unlock_vault';
+    mode: 'setup' | 'unlock_note' | 'unlock_vault' | 'change_pin';
     noteToOpen?: LocalNote | null;
     tagToSelect?: string;
   } | null>(null);
+
+  // Lock body scroll when any modal is open to isolate modal and prevent background scrolling
+  useEffect(() => {
+    const isAnyModalOpen = 
+      isEditorOpen || 
+      isTrashGalleryOpen || 
+      isAiModalOpen || 
+      isServerModalOpen || 
+      isProfileModalOpen || 
+      isLogoutModalOpen || 
+      Boolean(pinModalConfig?.isOpen) || 
+      Boolean(noteToDeleteId);
+
+    if (isAnyModalOpen) {
+      const originalOverflow = document.body.style.overflow;
+      document.body.style.overflow = 'hidden';
+      return () => {
+        document.body.style.overflow = originalOverflow;
+      };
+    } else {
+      document.body.style.overflow = '';
+    }
+  }, [
+    isEditorOpen,
+    isTrashGalleryOpen,
+    isAiModalOpen,
+    isServerModalOpen,
+    isProfileModalOpen,
+    isLogoutModalOpen,
+    pinModalConfig,
+    noteToDeleteId,
+  ]);
 
   const handleOpenNewNote = () => {
     setSelectedNote(null);
@@ -78,11 +110,6 @@ export const App: React.FC = () => {
 
   const handleSelectTag = (tag: string) => {
     if (tag === 'vault') {
-      const sessionPin = getSessionUnlockedPin();
-      if (sessionPin) {
-        setSelectedTag('vault');
-        return;
-      }
       const storedHash = getStoredPinHash();
       setPinModalConfig({
         isOpen: true,
@@ -90,6 +117,10 @@ export const App: React.FC = () => {
         tagToSelect: 'vault',
       });
       return;
+    }
+    // Leaving vault - re-lock session so vault is never left open
+    if (selectedTag === 'vault') {
+      setSessionUnlockedPin(null);
     }
     setSelectedTag(tag);
   };
@@ -241,7 +272,13 @@ export const App: React.FC = () => {
       <ProfileModal
         isOpen={isProfileModalOpen}
         onClose={() => setIsProfileModalOpen(false)}
-        onOpenPinSetup={() => setPinModalConfig({ isOpen: true, mode: 'setup' })}
+        onOpenPinSetup={() => {
+          const storedHash = getStoredPinHash();
+          setPinModalConfig({ 
+            isOpen: true, 
+            mode: storedHash ? 'change_pin' : 'setup' 
+          });
+        }}
         onOpenServerSettings={() => setIsServerModalOpen(true)}
         onLogout={() => setIsLogoutModalOpen(true)}
         theme={theme}

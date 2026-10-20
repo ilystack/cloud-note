@@ -126,6 +126,20 @@ export async function restoreLocalNote(noteId: string): Promise<void> {
   );
 }
 
+export async function toggleArchiveLocalNote(noteId: string, currentArchived: boolean): Promise<void> {
+  const db = await getDb();
+  const now = new Date().toISOString();
+  const nextVal = currentArchived ? 0 : 1;
+  await db.runAsync(
+    `UPDATE local_notes SET 
+      is_archived = ?, 
+      sync_status = 'pending_upload',
+      client_updated_at = ?
+    WHERE id = ?`,
+    [nextVal, now, noteId]
+  );
+}
+
 export async function hardDeleteLocalNote(noteId: string): Promise<void> {
   const db = await getDb();
   await db.runAsync('DELETE FROM local_notes WHERE id = ?', [noteId]);

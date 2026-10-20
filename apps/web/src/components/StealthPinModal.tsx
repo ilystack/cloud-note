@@ -6,7 +6,7 @@ import { getStoredPinHash, setStoredPinHash, setSessionUnlockedPin } from '../li
 interface StealthPinModalProps {
   isOpen: boolean;
   onClose: () => void;
-  mode: 'setup' | 'unlock_note' | 'unlock_vault';
+  mode: 'setup' | 'unlock_note' | 'unlock_vault' | 'change_pin';
   onSuccess: (pin: string) => void;
   title?: string;
   description?: string;
@@ -18,11 +18,31 @@ export const StealthPinModal: React.FC<StealthPinModalProps> = ({
   mode,
   onSuccess,
   title,
+  description,
 }) => {
   const [pin, setPin] = useState<string>('');
   const [confirmPin, setConfirmPin] = useState<string>('');
   const [setupStep, setSetupStep] = useState<'create' | 'confirm'>('create');
+  const [changeStep, setChangeStep] = useState<'current' | 'new' | 'confirm'>('current');
+  const [currentPin, setCurrentPin] = useState<string>('');
+  const [newPin, setNewPin] = useState<string>('');
+  const [confirmNewPin, setConfirmNewPin] = useState<string>('');
   const [errorMsg, setErrorMsg] = useState<string>('');
+
+  // Reset all states cleanly whenever modal is opened
+  useEffect(() => {
+    if (isOpen) {
+      setPin('');
+      setConfirmPin('');
+      setCurrentPin('');
+      setNewPin('');
+      setConfirmNewPin('');
+      setSetupStep('create');
+      // If changing PIN but no PIN was ever set, start at 'new'
+      setChangeStep(getStoredPinHash() ? 'current' : 'new');
+      setErrorMsg('');
+    }
+  }, [isOpen, mode]);
 
   // Physical keyboard support
   useEffect(() => {
@@ -44,14 +64,28 @@ export const StealthPinModal: React.FC<StealthPinModalProps> = ({
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isOpen, pin, confirmPin, setupStep, mode]);
+  }, [isOpen, pin, confirmPin, currentPin, newPin, confirmNewPin, setupStep, changeStep, mode]);
 
   if (!isOpen) return null;
 
   const handleDigit = (digit: string) => {
     setErrorMsg('');
-    if (mode === 'setup' && setupStep === 'confirm') {
-      setConfirmPin(prev => prev + digit);
+    if (currentDisplayLength >= 24) return;
+
+    if (mode === 'change_pin') {
+      if (changeStep === 'current') {
+        setCurrentPin(prev => prev + digit);
+      } else if (changeStep === 'new') {
+        setNewPin(prev => prev + digit);
+      } else {
+        setConfirmNewPin(prev => prev + digit);
+      }
+    } else if (mode === 'setup') {
+      if (setupStep === 'confirm') {
+        setConfirmPin(prev => prev + digit);
+      } else {
+        setPin(prev => prev + digit);
+      }
     } else {
       setPin(prev => prev + digit);
     }
@@ -59,8 +93,20 @@ export const StealthPinModal: React.FC<StealthPinModalProps> = ({
 
   const handleBackspace = () => {
     setErrorMsg('');
-    if (mode === 'setup' && setupStep === 'confirm') {
-      setConfirmPin(prev => prev.slice(0, -1));
+    if (mode === 'change_pin') {
+      if (changeStep === 'current') {
+        setCurrentPin(prev => prev.slice(0, -1));
+      } else if (changeStep === 'new') {
+        setNewPin(prev => prev.slice(0, -1));
+      } else {
+        setConfirmNewPin(prev => prev.slice(0, -1));
+      }
+    } else if (mode === 'setup') {
+      if (setupStep === 'confirm') {
+        setConfirmPin(prev => prev.slice(0, -1));
+      } else {
+        setPin(prev => prev.slice(0, -1));
+      }
     } else {
       setPin(prev => prev.slice(0, -1));
     }
@@ -68,6 +114,56 @@ export const StealthPinModal: React.FC<StealthPinModalProps> = ({
 
   const handleSubmit = async () => {
     setErrorMsg('');
+
+    if (mode === 'change_pin') {
+      if (changeStep === 'current') {
+        if (!isValidPin(currentPin)) {
+          setErrorMsg('Please enter your current PIN');
+          return;
+        }
+        const storedHash = getStoredPinHash();
+        if (storedHash) {
+          const isMatch = await verifyPinHash(currentPin, storedHash);
+          if (!isMatch) {
+            setErrorMsg('Incorrect current PIN. Try again.');
+            setCurrentPin('');
+            return;
+          }
+        }
+        setErrorMsg('');
+        setChangeStep('new');
+        return;
+      }
+
+      if (changeStep === 'new') {
+        if (!isValidPin(newPin)) {
+          setErrorMsg('New PIN must be at least 2 digits');
+          return;
+        }
+        if (currentPin && newPin === currentPin) {
+          setErrorMsg('New PIN must be different from current PIN');
+          return;
+        }
+        setErrorMsg('');
+        setChangeStep('confirm');
+        return;
+      }
+
+      if (changeStep === 'confirm') {
+        if (newPin !== confirmNewPin) {
+          setErrorMsg('PINs do not match');
+          setConfirmNewPin('');
+          return;
+        }
+        const hashed = await hashPin(newPin);
+        setStoredPinHash(hashed);
+        setSessionUnlockedPin(newPin);
+        onSuccess(newPin);
+        onClose();
+        return;
+      }
+      return;
+    }
 
     if (mode === 'setup') {
       if (setupStep === 'create') {
@@ -111,25 +207,46 @@ export const StealthPinModal: React.FC<StealthPinModalProps> = ({
     onClose();
   };
 
-  const currentDisplayLength = (mode === 'setup' && setupStep === 'confirm') ? confirmPin.length : pin.length;
+  let currentDisplayLength = pin.length;
+  if (mode === 'change_pin') {
+    if (changeStep === 'current') currentDisplayLength = currentPin.length;
+    else if (changeStep === 'new') currentDisplayLength = newPin.length;
+    else currentDisplayLength = confirmNewPin.length;
+  } else if (mode === 'setup') {
+    currentDisplayLength = (setupStep === 'confirm') ? confirmPin.length : pin.length;
+  }
 
-  const headerTitle = title || (mode === 'setup'
-    ? (setupStep === 'create' ? 'Create Your PIN' : 'Confirm Your PIN')
-    : 'Enter Your PIN');
+  let headerTitle = title;
+  let subtitle = description;
+
+  if (mode === 'change_pin') {
+    if (changeStep === 'current') {
+      headerTitle = 'Enter Current PIN';
+      subtitle = 'Verify your current PIN before creating a new one';
+    } else if (changeStep === 'new') {
+      headerTitle = 'Enter New PIN';
+      subtitle = 'Choose a new PIN (at least 2 digits)';
+    } else {
+      headerTitle = 'Confirm New PIN';
+      subtitle = 'Re-enter your new PIN to confirm';
+    }
+  } else if (mode === 'setup') {
+    headerTitle = setupStep === 'create' ? 'Create Your PIN' : 'Confirm Your PIN';
+    subtitle = setupStep === 'create' ? 'Choose a PIN of at least 2 digits' : 'Re-enter your PIN to confirm';
+  } else if (!headerTitle) {
+    headerTitle = mode === 'unlock_vault' ? 'Unlock Stealth Vault' : 'Enter Your PIN';
+  }
 
   return (
     <div 
-      onClick={(e) => {
-        if (e.target === e.currentTarget) onClose();
-      }}
       className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-modal-in select-none"
       role="dialog"
       aria-modal="true"
     >
-      <div className="relative w-full max-w-xs rounded-3xl modal-surface p-7 text-center shadow-2xl border border-slate-200/80 dark:border-neutral-800">
+      <div className="relative w-full max-w-xs rounded-3xl modal-surface p-7 text-center shadow-2xl border border-slate-200/80 dark:border-neutral-800 overflow-hidden">
         <button
           onClick={onClose}
-          className="absolute top-4 right-4 p-1.5 rounded-lg text-slate-400 hover:text-slate-700 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
+          className="absolute top-4 right-4 p-1.5 rounded-lg text-slate-400 hover:text-slate-700 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer z-10"
           aria-label="Close"
         >
           <X className="w-4 h-4" />
@@ -140,23 +257,51 @@ export const StealthPinModal: React.FC<StealthPinModalProps> = ({
           <h3 className="text-lg font-bold tracking-tight text-slate-900 dark:text-neutral-100 font-sans">
             {headerTitle}
           </h3>
+          {subtitle && (
+            <p className="text-xs text-slate-500 dark:text-neutral-400 mt-1 leading-relaxed">
+              {subtitle}
+            </p>
+          )}
         </div>
 
-        {/* Minimalist PIN Dots Indicator */}
+        {/* Minimalist PIN Dots Indicator with Strict Bounds & Dynamic Sizing */}
         <div className="mb-6">
-          <div className="h-12 w-full px-4 rounded-2xl bg-slate-100/90 dark:bg-[#121316] border border-slate-200/80 dark:border-neutral-800 flex items-center justify-center space-x-2.5">
+          <div className="relative h-12 w-full px-3.5 rounded-2xl bg-slate-100/90 dark:bg-[#121316] border border-slate-200/80 dark:border-neutral-800 flex items-center justify-center overflow-hidden">
             {currentDisplayLength === 0 ? (
-              <span className="text-base text-slate-300 dark:text-neutral-600 font-mono tracking-widest">
+              <span className="text-base text-slate-300 dark:text-neutral-600 font-mono tracking-widest select-none">
                 ••••
               </span>
             ) : (
-              <div className="flex items-center space-x-2.5">
+              <div 
+                className={`flex items-center max-w-full overflow-hidden transition-all duration-150 ${
+                  currentDisplayLength <= 8 
+                    ? 'justify-center gap-2' 
+                    : currentDisplayLength <= 12 
+                      ? 'justify-center gap-1.5' 
+                      : 'justify-end gap-1 px-1 w-full'
+                }`}
+                style={currentDisplayLength > 12 ? {
+                  maskImage: 'linear-gradient(to right, transparent 0%, black 20px)',
+                  WebkitMaskImage: 'linear-gradient(to right, transparent 0%, black 20px)'
+                } : undefined}
+              >
                 {Array.from({ length: currentDisplayLength }).map((_, idx) => (
                   <span
                     key={idx}
-                    className="w-2.5 h-2.5 rounded-full bg-amber-500 animate-in fade-in duration-150"
+                    className={`rounded-full bg-amber-500 animate-in fade-in duration-150 flex-shrink-0 ${
+                      currentDisplayLength <= 8 
+                        ? 'w-2.5 h-2.5' 
+                        : currentDisplayLength <= 12 
+                          ? 'w-2 h-2' 
+                          : 'w-1.5 h-1.5'
+                    }`}
                   />
                 ))}
+                {currentDisplayLength > 14 && (
+                  <span className="text-[10px] font-mono text-amber-500 font-bold ml-1.5 flex-shrink-0 bg-amber-500/10 px-1.5 py-0.5 rounded border border-amber-500/20">
+                    {currentDisplayLength}
+                  </span>
+                )}
               </div>
             )}
           </div>
