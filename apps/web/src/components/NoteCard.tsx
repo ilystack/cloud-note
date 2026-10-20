@@ -97,7 +97,7 @@ export const NoteCard: React.FC<NoteCardProps> = ({
       role="button"
       tabIndex={0}
       onKeyDown={(e) => (e.key === 'Enter' || e.key === ' ') && onClick()}
-      className="group relative flex flex-col justify-between p-5 rounded-2xl cursor-pointer note-card-colored border text-left select-none min-h-[200px]"
+      className="group relative flex flex-col justify-between p-5 rounded-2xl cursor-pointer note-card-colored text-left select-none min-h-[200px]"
       style={{
         '--card-bg-light': palette.cardBgLight,
         '--card-border-light': palette.cardBorderLight,
@@ -117,7 +117,6 @@ export const NoteCard: React.FC<NoteCardProps> = ({
               style={{ 
                 backgroundColor: palette.bgDark, 
                 color: palette.primary,
-                border: `1px solid ${palette.borderDark}`
               }}
             >
               <IconComponent className="w-4 h-4 stroke-[2]" />
@@ -169,7 +168,7 @@ export const NoteCard: React.FC<NoteCardProps> = ({
         </p>
       </div>
 
-      <div className="mt-4 pt-3 border-t border-slate-200/60 dark:border-white/[0.08] flex items-center justify-between text-[11px] text-slate-400 dark:text-neutral-400">
+      <div className="mt-4 pt-2.5 flex items-center justify-between text-[11px] text-slate-500/80 dark:text-neutral-400">
         <div className="flex items-center space-x-1.5 font-mono">
           <Clock className="w-3 h-3 text-slate-400 dark:text-neutral-500" />
           <span>{formattedDate}</span>

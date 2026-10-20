@@ -176,24 +176,24 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
                   onClose();
                   onLogout();
                 }}
-                className="w-full flex items-center justify-between p-3 rounded-xl bg-slate-50 hover:bg-rose-50 dark:bg-[#141518] dark:hover:bg-rose-950/20 border border-slate-200 dark:border-neutral-800/80 hover:border-rose-300 dark:hover:border-rose-900/40 transition-colors text-left group cursor-pointer"
+                className="w-full flex items-center justify-between p-3.5 rounded-xl bg-rose-600 hover:bg-rose-500 active:scale-[0.99] text-white shadow-md shadow-rose-600/25 transition-all text-left group cursor-pointer"
               >
-              <div className="flex items-center space-x-3">
-                <div className="w-8 h-8 rounded-lg bg-rose-500/10 text-rose-500 dark:text-rose-400 border border-rose-500/20 flex items-center justify-center">
-                  <LogOut className="w-4 h-4" />
+                <div className="flex items-center space-x-3">
+                  <div className="w-8 h-8 rounded-lg bg-white/20 text-white flex items-center justify-center">
+                    <LogOut className="w-4 h-4 stroke-[2.5]" />
+                  </div>
+                  <div>
+                    <span className="text-xs font-semibold text-white block">
+                      Sign Out
+                    </span>
+                    <span className="text-[11px] text-rose-100/90 block">
+                      Disconnect current user session
+                    </span>
+                  </div>
                 </div>
-                <div>
-                  <span className="text-xs font-semibold text-rose-600 dark:text-rose-300 block">
-                    Sign Out
-                  </span>
-                  <span className="text-[11px] text-slate-500 dark:text-neutral-400 block">
-                    Disconnect current user session
-                  </span>
-                </div>
-              </div>
-              <ChevronRight className="w-4 h-4 text-slate-400 dark:text-neutral-500 group-hover:text-rose-500 dark:group-hover:text-rose-400 transition-colors" />
-            </button>
-          </>
+                <ChevronRight className="w-4 h-4 text-white/80 group-hover:translate-x-0.5 transition-transform" />
+              </button>
+            </>
           ) : (
             <button
               onClick={() => {

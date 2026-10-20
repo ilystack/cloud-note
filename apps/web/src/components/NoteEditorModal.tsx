@@ -365,6 +365,37 @@ export const NoteEditorModal: React.FC<NoteEditorModalProps> = ({
     setTimeout(updateActiveFormats, 10);
   };
 
+  const handleToggleCode = () => {
+    if (isDrawingMode) return;
+    if (editorRef.current) {
+      editorRef.current.focus();
+    }
+    
+    const sel = window.getSelection();
+    let inCode = activeFormats.code;
+    if (sel && sel.anchorNode && editorRef.current?.contains(sel.anchorNode)) {
+      let curr: Node | null = sel.anchorNode;
+      while (curr && curr !== editorRef.current) {
+        if (curr.nodeName === 'PRE' || curr.nodeName === 'CODE') {
+          inCode = true;
+          break;
+        }
+        curr = curr.parentNode;
+      }
+    }
+
+    if (inCode) {
+      document.execCommand('formatBlock', false, '<p>');
+      setActiveFormats(prev => ({ ...prev, code: false }));
+    } else {
+      document.execCommand('formatBlock', false, '<pre>');
+      setActiveFormats(prev => ({ ...prev, code: true }));
+    }
+
+    calculateWordCount();
+    setTimeout(updateActiveFormats, 30);
+  };
+
   const handleApplyTextColor = (color: string) => {
     setActiveTextColor(color || 'default');
     setIsTextColorPickerOpen(false);
@@ -770,9 +801,9 @@ export const NoteEditorModal: React.FC<NoteEditorModalProps> = ({
                   </button>
                   <button
                     type="button"
-                    onClick={() => applyFormat('formatBlock', '<pre>')}
+                    onClick={handleToggleCode}
                     className={getFormatBtnClass(activeFormats.code)}
-                    title="Code Block"
+                    title={activeFormats.code ? "Exit Code Block" : "Code Block"}
                   >
                     <Code className="w-3.5 h-3.5" />
                   </button>
