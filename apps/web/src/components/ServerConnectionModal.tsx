@@ -13,6 +13,8 @@ import {
   setActiveServerUrl, 
   checkServerHealth 
 } from '../lib/pocketbase';
+import { isValidPin, hashPin } from '@cloudnotes/shared-types';
+import { setStoredPinHash, setSessionUnlockedPin } from '../lib/storage';
 
 interface ServerConnectionModalProps {
   isOpen: boolean;
@@ -36,7 +38,7 @@ export const ServerConnectionModal: React.FC<ServerConnectionModalProps> = ({
   const [authMode, setAuthMode] = useState<'login' | 'register' | 'forgot'>('login');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [passwordConfirm, setPasswordConfirm] = useState('');
+  const [vaultPin, setVaultPin] = useState('');
   const [name, setName] = useState('');
   const [authLoading, setAuthLoading] = useState(false);
   const [authMessage, setAuthMessage] = useState<{ type: 'error' | 'success'; text: string } | null>(null);
@@ -66,17 +68,23 @@ export const ServerConnectionModal: React.FC<ServerConnectionModalProps> = ({
         onAuthChange();
         setTimeout(onClose, 600);
       } else if (authMode === 'register') {
-        if (password !== passwordConfirm) {
-          throw new Error('Passwords do not match');
+        if (!isValidPin(vaultPin)) {
+          throw new Error('Please enter a valid Vault PIN (at least 2 digits)');
         }
         await pb.collection('users').create({
           email: email.trim(),
           password,
-          passwordConfirm,
+          passwordConfirm: password,
           name: name.trim() || undefined,
         });
         await pb.collection('users').authWithPassword(email.trim(), password);
-        setAuthMessage({ type: 'success', text: 'Account created and synced.' });
+
+        // Store Vault PIN hash and unlock current session
+        const hashedPin = await hashPin(vaultPin);
+        setStoredPinHash(hashedPin);
+        setSessionUnlockedPin(vaultPin);
+
+        setAuthMessage({ type: 'success', text: 'Account created with Vault PIN.' });
         onAuthChange();
         setTimeout(onClose, 600);
       } else if (authMode === 'forgot') {
@@ -92,8 +100,9 @@ export const ServerConnectionModal: React.FC<ServerConnectionModalProps> = ({
 
   const handleLogout = () => {
     pb.authStore.clear();
-    setAuthMessage({ type: 'success', text: 'Session closed.' });
-    onAuthChange();
+    setSessionUnlockedPin(null);
+    localStorage.removeItem('cloudnotes_cached_notes');
+    window.location.href = '/';
   };
 
   const isLoggedIn = pb.authStore.isValid;
@@ -266,15 +275,19 @@ export const ServerConnectionModal: React.FC<ServerConnectionModalProps> = ({
 
                 {authMode === 'register' && (
                   <div className="animate-field-in">
-                    <label className="text-[11px] font-mono text-slate-500 dark:text-neutral-400 block mb-1">Confirm Password</label>
+                    <label className="text-[11px] font-mono text-slate-500 dark:text-neutral-400 block mb-1">
+                      Create Vault PIN (2-6 Digits)
+                    </label>
                     <input
                       type="password"
+                      inputMode="numeric"
                       required
-                      minLength={8}
-                      value={passwordConfirm}
-                      onChange={(e) => setPasswordConfirm(e.target.value)}
-                      placeholder="Repeat password"
-                      className="w-full px-3 py-1.5 rounded-lg bg-slate-100 dark:bg-[#121214] border border-slate-300 dark:border-neutral-800 text-xs text-slate-800 dark:text-neutral-200 placeholder-slate-400 dark:placeholder-neutral-500 focus:outline-none focus:border-amber-500/60"
+                      minLength={2}
+                      maxLength={6}
+                      value={vaultPin}
+                      onChange={(e) => setVaultPin(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                      placeholder="e.g. 1234"
+                      className="w-full px-3 py-1.5 rounded-lg bg-slate-100 dark:bg-[#121214] border border-slate-300 dark:border-neutral-800 text-xs text-slate-800 dark:text-neutral-200 placeholder-slate-400 dark:placeholder-neutral-500 focus:outline-none focus:border-amber-500/60 font-mono tracking-widest"
                     />
                   </div>
                 )}

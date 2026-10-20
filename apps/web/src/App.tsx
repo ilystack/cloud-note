@@ -8,6 +8,9 @@ import { StealthPinModal } from './components/StealthPinModal';
 import { AiAssistantModal } from './components/AiAssistantModal';
 import { ServerConnectionModal } from './components/ServerConnectionModal';
 import { ProfileModal } from './components/ProfileModal';
+import { ConfirmDeleteModal } from './components/ConfirmDeleteModal';
+import { ConfirmLogoutModal } from './components/ConfirmLogoutModal';
+import { getSessionUnlockedPin, setSessionUnlockedPin, getStoredPinHash } from './lib/storage';
 import { LocalNote } from '@cloudnotes/shared-types';
 import { Plus, Bot, Trash2, Search, X } from 'lucide-react';
 import { pb } from './lib/pocketbase';
@@ -34,10 +37,19 @@ export const App: React.FC = () => {
   const [selectedNote, setSelectedNote] = useState<LocalNote | null>(null);
   const [isEditorOpen, setIsEditorOpen] = useState(false);
   const [isTrashGalleryOpen, setIsTrashGalleryOpen] = useState(false);
-  const [isVaultModalOpen, setIsVaultModalOpen] = useState(false);
   const [isAiModalOpen, setIsAiModalOpen] = useState(false);
   const [isServerModalOpen, setIsServerModalOpen] = useState(false);
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
+  const [isLogoutModalOpen, setIsLogoutModalOpen] = useState(false);
+  const [noteToDeleteId, setNoteToDeleteId] = useState<string | null>(null);
+
+  // Vault PIN & Note Protection Modal state
+  const [pinModalConfig, setPinModalConfig] = useState<{
+    isOpen: boolean;
+    mode: 'setup' | 'unlock_note' | 'unlock_vault';
+    noteToOpen?: LocalNote | null;
+    tagToSelect?: string;
+  } | null>(null);
 
   const handleOpenNewNote = () => {
     setSelectedNote(null);
@@ -45,8 +57,52 @@ export const App: React.FC = () => {
   };
 
   const handleOpenNote = (note: LocalNote) => {
+    if (note.is_locked) {
+      const sessionPin = getSessionUnlockedPin();
+      if (sessionPin) {
+        setSelectedNote(note);
+        setIsEditorOpen(true);
+        return;
+      }
+      const storedHash = getStoredPinHash();
+      setPinModalConfig({
+        isOpen: true,
+        mode: storedHash ? 'unlock_note' : 'setup',
+        noteToOpen: note,
+      });
+      return;
+    }
     setSelectedNote(note);
     setIsEditorOpen(true);
+  };
+
+  const handleSelectTag = (tag: string) => {
+    if (tag === 'vault') {
+      const sessionPin = getSessionUnlockedPin();
+      if (sessionPin) {
+        setSelectedTag('vault');
+        return;
+      }
+      const storedHash = getStoredPinHash();
+      setPinModalConfig({
+        isOpen: true,
+        mode: storedHash ? 'unlock_vault' : 'setup',
+        tagToSelect: 'vault',
+      });
+      return;
+    }
+    setSelectedTag(tag);
+  };
+
+  const handlePinSuccess = (pin: string) => {
+    setSessionUnlockedPin(pin);
+    if (pinModalConfig?.noteToOpen) {
+      setSelectedNote(pinModalConfig.noteToOpen);
+      setIsEditorOpen(true);
+    } else if (pinModalConfig?.tagToSelect) {
+      setSelectedTag(pinModalConfig.tagToSelect);
+    }
+    setPinModalConfig(null);
   };
 
   const handleArchiveToggle = async (note: LocalNote) => {
@@ -61,9 +117,11 @@ export const App: React.FC = () => {
     });
   };
 
-  const handleLogout = () => {
+  const handleExecuteLogout = () => {
     pb.authStore.clear();
-    syncWithServer();
+    setSessionUnlockedPin(null);
+    localStorage.removeItem('cloudnotes_cached_notes');
+    window.location.href = '/';
   };
 
   const isLoggedIn = pb.authStore.isValid;
@@ -81,7 +139,7 @@ export const App: React.FC = () => {
     <div className="min-h-screen bg-[var(--bg-main)] text-slate-900 dark:text-slate-100 flex flex-col selection:bg-amber-500/25 selection:text-amber-200 relative pb-28 transition-colors duration-200">
       <Header
         selectedTag={selectedTag}
-        onSelectTag={setSelectedTag}
+        onSelectTag={handleSelectTag}
         onRequireAuth={requireAuth}
         syncStatus={syncStatus}
         onSyncClick={() => requireAuth(syncWithServer)}
@@ -121,7 +179,7 @@ export const App: React.FC = () => {
         <BentoGrid
           activeNotes={activeNotes}
           onOpenNote={handleOpenNote}
-          onDeleteNote={(id) => requireAuth(() => moveToTrash(id))}
+          onDeleteNote={(id) => requireAuth(() => setNoteToDeleteId(id))}
           onArchiveToggle={(note) => requireAuth(() => handleArchiveToggle(note))}
         />
       </main>
@@ -183,9 +241,9 @@ export const App: React.FC = () => {
       <ProfileModal
         isOpen={isProfileModalOpen}
         onClose={() => setIsProfileModalOpen(false)}
-        onOpenPinSetup={() => setIsVaultModalOpen(true)}
+        onOpenPinSetup={() => setPinModalConfig({ isOpen: true, mode: 'setup' })}
         onOpenServerSettings={() => setIsServerModalOpen(true)}
-        onLogout={handleLogout}
+        onLogout={() => setIsLogoutModalOpen(true)}
         theme={theme}
         onToggleTheme={toggleTheme}
       />
@@ -209,10 +267,10 @@ export const App: React.FC = () => {
       />
 
       <StealthPinModal
-        isOpen={isVaultModalOpen}
-        onClose={() => setIsVaultModalOpen(false)}
-        mode="setup"
-        onSuccess={() => {}}
+        isOpen={Boolean(pinModalConfig?.isOpen)}
+        onClose={() => setPinModalConfig(null)}
+        mode={pinModalConfig?.mode || 'setup'}
+        onSuccess={handlePinSuccess}
       />
 
       <AiAssistantModal
@@ -226,6 +284,23 @@ export const App: React.FC = () => {
         isOpen={isServerModalOpen}
         onClose={() => setIsServerModalOpen(false)}
         onAuthChange={syncWithServer}
+      />
+
+      <ConfirmDeleteModal
+        isOpen={Boolean(noteToDeleteId)}
+        onClose={() => setNoteToDeleteId(null)}
+        onConfirm={() => {
+          if (noteToDeleteId) {
+            moveToTrash(noteToDeleteId);
+            setNoteToDeleteId(null);
+          }
+        }}
+      />
+
+      <ConfirmLogoutModal
+        isOpen={isLogoutModalOpen}
+        onClose={() => setIsLogoutModalOpen(false)}
+        onConfirm={handleExecuteLogout}
       />
     </div>
   );

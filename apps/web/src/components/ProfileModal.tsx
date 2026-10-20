@@ -4,8 +4,6 @@ import {
   Shield, 
   Server, 
   LogOut, 
-  CheckCircle2, 
-  CloudOff,
   ChevronRight,
   Sun,
   Moon
@@ -71,19 +69,6 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
               </h3>
             </div>
             <p className="text-xs text-slate-500 dark:text-neutral-400 truncate">{userEmail}</p>
-            <div className="mt-1 flex items-center space-x-1 text-[11px] font-mono">
-              {isLoggedIn ? (
-                <span className="flex items-center space-x-1 text-emerald-600 dark:text-emerald-400">
-                  <CheckCircle2 className="w-3 h-3" />
-                  <span>PocketBase Synced</span>
-                </span>
-              ) : (
-                <span className="flex items-center space-x-1 text-slate-400 dark:text-neutral-500">
-                  <CloudOff className="w-3 h-3" />
-                  <span>Offline Storage</span>
-                </span>
-              )}
-            </div>
           </div>
         </div>
 
@@ -184,13 +169,15 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
           </button>
 
           {isLoggedIn ? (
-            <button
-              onClick={() => {
-                onClose();
-                onLogout();
-              }}
-              className="w-full flex items-center justify-between p-3 rounded-xl bg-slate-50 hover:bg-rose-50 dark:bg-[#141518] dark:hover:bg-rose-950/20 border border-slate-200 dark:border-neutral-800/80 hover:border-rose-300 dark:hover:border-rose-900/40 transition-colors text-left group cursor-pointer"
-            >
+            <>
+              <div className="my-2 border-t border-slate-200 dark:border-neutral-800" />
+              <button
+                onClick={() => {
+                  onClose();
+                  onLogout();
+                }}
+                className="w-full flex items-center justify-between p-3 rounded-xl bg-slate-50 hover:bg-rose-50 dark:bg-[#141518] dark:hover:bg-rose-950/20 border border-slate-200 dark:border-neutral-800/80 hover:border-rose-300 dark:hover:border-rose-900/40 transition-colors text-left group cursor-pointer"
+              >
               <div className="flex items-center space-x-3">
                 <div className="w-8 h-8 rounded-lg bg-rose-500/10 text-rose-500 dark:text-rose-400 border border-rose-500/20 flex items-center justify-center">
                   <LogOut className="w-4 h-4" />
@@ -206,6 +193,7 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
               </div>
               <ChevronRight className="w-4 h-4 text-slate-400 dark:text-neutral-500 group-hover:text-rose-500 dark:group-hover:text-rose-400 transition-colors" />
             </button>
+          </>
           ) : (
             <button
               onClick={() => {

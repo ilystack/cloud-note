@@ -124,7 +124,7 @@ export const Header: React.FC<HeaderProps> = ({
         <div className="flex items-center space-x-2.5 flex-shrink-0">
           <button
             onClick={onSyncClick}
-            className="flex items-center space-x-1.5 px-2.5 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-[#141518] dark:hover:bg-[#1f2025] border border-slate-300/80 dark:border-neutral-800 text-xs transition-colors cursor-pointer select-none"
+            className="flex items-center space-x-1.5 px-1 py-1 text-xs transition-opacity hover:opacity-80 cursor-pointer select-none"
             title={
               pb.authStore.isValid 
                 ? `Sync status: ${syncStatus}. Click to trigger sync.` 

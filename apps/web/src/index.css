@@ -99,31 +99,47 @@
   border-color: var(--card-border-hover);
 }
 
-/* Dynamic Note Card Ambient Paper Style (Craft.do / Google Keep Dark) */
+/* Neumorphism Semi-Minimalism Raised Note Cards */
 .note-card-colored {
-  background-color: var(--card-bg-light, #FDFBF7);
-  border-color: var(--card-border-light, #F3E8CE);
-  box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.02);
-  transition: background-color 0.2s cubic-bezier(0.16, 1, 0.3, 1), 
-              border-color 0.2s cubic-bezier(0.16, 1, 0.3, 1),
-              box-shadow 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  background-color: var(--card-bg-light, #FDF3E3);
+  border: 1px solid var(--card-border-light, rgba(255, 255, 255, 0.6));
+  box-shadow: 
+    6px 6px 16px -2px rgba(0, 0, 0, 0.07),
+    -5px -5px 14px 0 rgba(255, 255, 255, 0.85),
+    inset 0 1px 1px 0 rgba(255, 255, 255, 0.6);
+  border-radius: 1.25rem;
+  transition: transform 0.22s cubic-bezier(0.16, 1, 0.3, 1),
+              box-shadow 0.22s cubic-bezier(0.16, 1, 0.3, 1),
+              background-color 0.22s ease,
+              border-color 0.22s ease;
 }
 
 .note-card-colored:hover {
-  border-color: var(--card-border-hover-light, #cbd5e1);
-  box-shadow: 0 4px 12px -2px rgba(0, 0, 0, 0.05);
+  transform: translateY(-3px);
+  border-color: var(--card-border-hover-light, rgba(255, 255, 255, 0.9));
+  box-shadow: 
+    10px 14px 24px -3px rgba(0, 0, 0, 0.11),
+    -7px -7px 18px 0 rgba(255, 255, 255, 0.95),
+    inset 0 1px 2px 0 rgba(255, 255, 255, 0.8);
 }
 
 html.dark .note-card-colored, :root.dark .note-card-colored {
   background-color: var(--card-bg-dark, #1c1813);
-  border-color: var(--card-border-dark, rgba(255, 255, 255, 0.14));
-  box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.25);
+  border: 1px solid var(--card-border-dark, rgba(255, 255, 255, 0.08));
+  box-shadow: 
+    6px 6px 18px 0 rgba(0, 0, 0, 0.5),
+    -3px -3px 10px 0 rgba(255, 255, 255, 0.03),
+    inset 0 1px 1px 0 rgba(255, 255, 255, 0.06);
 }
 
 html.dark .note-card-colored:hover, :root.dark .note-card-colored:hover {
+  transform: translateY(-3px);
   background-color: var(--card-hover-dark, #231e17);
-  border-color: var(--card-border-hover-dark, rgba(255, 255, 255, 0.35));
-  box-shadow: 0 8px 20px -4px rgba(0, 0, 0, 0.45);
+  border-color: var(--card-border-hover-dark, rgba(255, 255, 255, 0.16));
+  box-shadow: 
+    10px 14px 28px -2px rgba(0, 0, 0, 0.65),
+    -4px -4px 14px 0 rgba(255, 255, 255, 0.05),
+    inset 0 1px 2px 0 rgba(255, 255, 255, 0.09);
 }
 
 /* Subtle transitions for modal popups */

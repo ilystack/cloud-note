@@ -28,6 +28,8 @@ import { NOTE_PALETTES } from '@cloudnotes/design-system';
 import { pb, uploadNoteAttachment } from '../lib/pocketbase';
 import { getSessionUnlockedPin } from '../lib/storage';
 import { StealthPinModal } from './StealthPinModal';
+import { ConfirmDeleteModal } from './ConfirmDeleteModal';
+import { ColorWheelPicker } from './ColorWheelPicker';
 
 interface NoteEditorModalProps {
   isOpen: boolean;
@@ -39,6 +41,17 @@ interface NoteEditorModalProps {
 }
 
 const INK_DATA_REGEX = /<!--CLOUDNASTES_INK_DATA:(.*?)-->/;
+
+const TEXT_COLORS = [
+  { id: 'default', label: 'Default', color: '' },
+  { id: 'dark', label: 'Dark', color: '#1E293B' },
+  { id: 'slate', label: 'Muted', color: '#64748B' },
+  { id: 'rose', label: 'Rose', color: '#EF4444' },
+  { id: 'amber', label: 'Amber', color: '#F59E0B' },
+  { id: 'emerald', label: 'Emerald', color: '#10B981' },
+  { id: 'blue', label: 'Blue', color: '#3B82F6' },
+  { id: 'purple', label: 'Purple', color: '#8B5CF6' },
+];
 
 function markdownToHtml(md: string): string {
   if (!md) return '';
@@ -96,6 +109,10 @@ export const NoteEditorModal: React.FC<NoteEditorModalProps> = ({
   const [isSaving, setIsSaving] = useState(false);
   const [isPinModalOpen, setIsPinModalOpen] = useState(false);
   const [activePin, setActivePin] = useState<string | null>(null);
+  const [isColorWheelOpen, setIsColorWheelOpen] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [isTextColorPickerOpen, setIsTextColorPickerOpen] = useState(false);
+  const [activeTextColor, setActiveTextColor] = useState<string>('default');
 
   // In-Place Ink Drawing State
   const [isDrawingMode, setIsDrawingMode] = useState(false);
@@ -345,6 +362,22 @@ export const NoteEditorModal: React.FC<NoteEditorModalProps> = ({
     }
     document.execCommand(command, false, value);
     calculateWordCount();
+    setTimeout(updateActiveFormats, 10);
+  };
+
+  const handleApplyTextColor = (color: string) => {
+    setActiveTextColor(color || 'default');
+    setIsTextColorPickerOpen(false);
+
+    if (editorRef.current) {
+      editorRef.current.focus();
+    }
+
+    if (!color || color === 'default') {
+      document.execCommand('removeFormat', false);
+    } else {
+      document.execCommand('foreColor', false, color);
+    }
     setTimeout(updateActiveFormats, 10);
   };
 
@@ -600,61 +633,95 @@ export const NoteEditorModal: React.FC<NoteEditorModalProps> = ({
       >
         <div className="relative w-full max-w-4xl rounded-2xl modal-surface flex flex-col max-h-[92vh] overflow-hidden animate-modal-in">
           {/* Top Bar: Cover Color & Lock */}
-          <div className="px-6 py-3 border-b border-slate-200 dark:border-neutral-800 bg-slate-50 dark:bg-[#141518] flex items-center justify-between gap-3 text-xs">
-            <div className="flex items-center space-x-2.5">
-              <span className="text-slate-700 dark:text-neutral-200 font-mono text-[11px] font-semibold flex items-center space-x-1.5">
-                <Palette className="w-3.5 h-3.5 text-slate-500 dark:text-neutral-400" />
-                <span>Cover:</span>
-              </span>
-              <div className="flex items-center space-x-2">
-                {NOTE_PALETTES.map((pal) => (
-                  <button
-                    key={pal.id}
-                    type="button"
-                    onClick={() => setCoverColor(pal.primary)}
-                    className={`w-4 h-4 rounded-full transition-all cursor-pointer ${
-                      coverColor.toLowerCase() === pal.primary.toLowerCase()
-                        ? 'ring-2 ring-slate-800 dark:ring-white ring-offset-2 ring-offset-slate-50 dark:ring-offset-[#141518] scale-110 shadow-sm'
-                        : 'opacity-70 hover:opacity-100 hover:scale-105'
-                    }`}
-                    style={{ backgroundColor: pal.primary }}
-                    title={pal.name}
+          {(() => {
+            const isCustomColor = !NOTE_PALETTES.some(
+              (pal) => pal.primary.toLowerCase() === coverColor.toLowerCase()
+            );
+
+            return (
+              <div className="px-6 py-3 border-b border-slate-200 dark:border-neutral-800 bg-slate-50 dark:bg-[#141518] flex items-center justify-between gap-3 text-xs">
+                <div className="relative flex items-center space-x-2.5">
+                  <span className="text-slate-700 dark:text-neutral-200 font-mono text-[11px] font-semibold flex items-center space-x-1.5">
+                    <Palette className="w-3.5 h-3.5 text-slate-500 dark:text-neutral-400" />
+                    <span>Cover:</span>
+                  </span>
+                  <div className="flex items-center space-x-2">
+                    {NOTE_PALETTES.map((pal) => (
+                      <button
+                        key={pal.id}
+                        type="button"
+                        onClick={() => setCoverColor(pal.primary)}
+                        className={`w-4 h-4 rounded-full transition-all cursor-pointer ${
+                          coverColor.toLowerCase() === pal.primary.toLowerCase()
+                            ? 'ring-2 ring-slate-800 dark:ring-neutral-200 ring-offset-1 ring-offset-slate-50 dark:ring-offset-[#141518]'
+                            : 'opacity-70 hover:opacity-100 hover:scale-105'
+                        }`}
+                        style={{ backgroundColor: pal.primary }}
+                        title={pal.name}
+                      />
+                    ))}
+
+                    {/* Custom Color Swatch with diagonal slash icon */}
+                    <button
+                      type="button"
+                      onClick={() => setIsColorWheelOpen((prev) => !prev)}
+                      className={`w-4 h-4 rounded-full transition-all cursor-pointer relative flex items-center justify-center ${
+                        isCustomColor
+                          ? 'ring-2 ring-slate-800 dark:ring-neutral-200 ring-offset-1 ring-offset-slate-50 dark:ring-offset-[#141518]'
+                          : 'opacity-70 hover:opacity-100 hover:scale-105'
+                      }`}
+                      style={isCustomColor ? { backgroundColor: coverColor } : {}}
+                      title={isCustomColor ? `Custom color (${coverColor})` : 'Custom Color Wheel'}
+                      aria-label="Custom color picker"
+                    >
+                      {!isCustomColor && (
+                        <svg viewBox="0 0 20 20" className="w-full h-full block">
+                          <circle cx="10" cy="10" r="8" fill="none" stroke="currentColor" strokeWidth="1.2" className="text-slate-400 dark:text-neutral-500" />
+                          <line x1="4.5" y1="4.5" x2="15.5" y2="15.5" stroke="#ef4444" strokeWidth="1.8" strokeLinecap="round" />
+                        </svg>
+                      )}
+                    </button>
+                  </div>
+
+                  {/* Color Wheel Popover */}
+                  <ColorWheelPicker
+                    isOpen={isColorWheelOpen}
+                    onClose={() => setIsColorWheelOpen(false)}
+                    color={coverColor}
+                    onChange={(c) => setCoverColor(c)}
                   />
-                ))}
+                </div>
+
+                <div className="flex items-center space-x-2">
+                  {note && (
+                    <button
+                      type="button"
+                      onClick={() => setShowDeleteConfirm(true)}
+                      className="p-2 rounded-lg text-slate-400 hover:text-rose-500 dark:hover:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-500/10 transition-colors cursor-pointer"
+                      title="Move to Trash"
+                      aria-label="Delete"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  )}
+
+                  <button
+                    type="button"
+                    onClick={handleToggleLock}
+                    className={`p-2 rounded-lg border transition-colors flex items-center justify-center cursor-pointer ${
+                      isLocked
+                        ? 'bg-amber-500/15 text-amber-600 dark:text-amber-400 border-amber-500/40 hover:bg-amber-500/25'
+                        : 'bg-white dark:bg-[#1c1d22] text-slate-500 dark:text-neutral-400 border-slate-300 dark:border-neutral-700 hover:text-slate-800 dark:hover:text-neutral-200 hover:bg-slate-100 dark:hover:bg-[#26272e]'
+                    }`}
+                    title={isLocked ? 'Locked Note (Protected with Stealth Vault)' : 'Click to Lock Note with Vault PIN'}
+                    aria-label="Toggle Lock"
+                  >
+                    {isLocked ? <Lock className="w-4 h-4 text-amber-500 dark:text-amber-400" /> : <Unlock className="w-4 h-4" />}
+                  </button>
+                </div>
               </div>
-            </div>
-
-            <div className="flex items-center space-x-2">
-              <button
-                type="button"
-                onClick={handleToggleLock}
-                className={`p-2 rounded-lg border transition-colors flex items-center justify-center cursor-pointer ${
-                  isLocked
-                    ? 'bg-amber-500/15 text-amber-600 dark:text-amber-400 border-amber-500/40 hover:bg-amber-500/25'
-                    : 'bg-white dark:bg-[#1c1d22] text-slate-500 dark:text-neutral-400 border-slate-300 dark:border-neutral-700 hover:text-slate-800 dark:hover:text-neutral-200 hover:bg-slate-100 dark:hover:bg-[#26272e]'
-                }`}
-                title={isLocked ? 'Locked Note (Protected with Stealth Vault)' : 'Click to Lock Note with Vault PIN'}
-                aria-label="Toggle Lock"
-              >
-                {isLocked ? <Lock className="w-4 h-4 text-amber-500 dark:text-amber-400" /> : <Unlock className="w-4 h-4" />}
-              </button>
-
-              {note && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    onDelete(note.id);
-                    onClose();
-                  }}
-                  className="p-2 rounded-lg text-slate-400 hover:text-rose-500 dark:hover:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-500/10 transition-colors cursor-pointer"
-                  title="Move to Trash"
-                  aria-label="Delete"
-                >
-                  <Trash2 className="w-4 h-4" />
-                </button>
-              )}
-            </div>
-          </div>
+            );
+          })()}
 
           {/* Dynamic Action Toolbar */}
           <div className="px-6 py-2 border-b border-slate-200 dark:border-neutral-800/70 bg-slate-100/70 dark:bg-[#16171b] flex flex-wrap items-center justify-between gap-3 text-xs">
@@ -709,6 +776,55 @@ export const NoteEditorModal: React.FC<NoteEditorModalProps> = ({
                   >
                     <Code className="w-3.5 h-3.5" />
                   </button>
+
+                  {/* Text Color Button T */}
+                  <div className="relative">
+                    <button
+                      type="button"
+                      onClick={() => setIsTextColorPickerOpen((prev) => !prev)}
+                      className={`relative flex flex-col items-center justify-center w-7 h-7 rounded-lg border transition-all cursor-pointer ${
+                        isTextColorPickerOpen
+                          ? 'bg-amber-500/20 text-amber-600 dark:text-amber-300 border-amber-500/40 shadow-sm'
+                          : 'border-transparent text-slate-600 hover:text-slate-950 hover:bg-slate-200/90 dark:text-neutral-400 dark:hover:text-white dark:hover:bg-[#26272e]'
+                      }`}
+                      title="Text Color"
+                    >
+                      <span className="font-serif font-bold text-xs leading-none">T</span>
+                      <span
+                        className="w-3.5 h-0.5 rounded-full mt-0.5"
+                        style={{
+                          backgroundColor: activeTextColor === 'default' ? 'currentColor' : activeTextColor,
+                        }}
+                      />
+                    </button>
+
+                    {/* Text Color Dropdown */}
+                    {isTextColorPickerOpen && (
+                      <div className="absolute top-9 left-0 z-50 p-2 rounded-xl bg-white dark:bg-[#18191e] border border-slate-200 dark:border-neutral-800 shadow-xl flex items-center space-x-1.5 animate-modal-in select-none">
+                        {TEXT_COLORS.map((tc) => (
+                          <button
+                            key={tc.id}
+                            type="button"
+                            onClick={() => handleApplyTextColor(tc.color)}
+                            className={`w-5 h-5 rounded-full transition-all cursor-pointer relative flex items-center justify-center ${
+                              activeTextColor === (tc.color || 'default')
+                                ? 'ring-2 ring-slate-800 dark:ring-neutral-200 ring-offset-1 ring-offset-white dark:ring-offset-[#18191e]'
+                                : 'opacity-80 hover:opacity-100 hover:scale-110'
+                            }`}
+                            style={tc.color ? { backgroundColor: tc.color } : {}}
+                            title={tc.label}
+                          >
+                            {tc.id === 'default' && (
+                              <svg viewBox="0 0 20 20" className="w-full h-full block">
+                                <circle cx="10" cy="10" r="8" fill="none" stroke="currentColor" strokeWidth="1.2" className="text-slate-400 dark:text-neutral-500" />
+                                <line x1="4.5" y1="4.5" x2="15.5" y2="15.5" stroke="#ef4444" strokeWidth="1.8" strokeLinecap="round" />
+                              </svg>
+                            )}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
                 </div>
 
                 <div className="flex items-center space-x-2">
@@ -944,6 +1060,17 @@ export const NoteEditorModal: React.FC<NoteEditorModalProps> = ({
         onClose={() => setIsPinModalOpen(false)}
         mode="unlock_note"
         onSuccess={handlePinSuccess}
+      />
+
+      <ConfirmDeleteModal
+        isOpen={showDeleteConfirm}
+        onClose={() => setShowDeleteConfirm(false)}
+        onConfirm={() => {
+          if (note) {
+            onDelete(note.id);
+            onClose();
+          }
+        }}
       />
     </>
   );
