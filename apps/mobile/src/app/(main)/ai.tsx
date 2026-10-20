@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { 
   View, 
   Text, 
@@ -13,19 +13,15 @@ import * as SecureStore from 'expo-secure-store';
 import { 
   AiConfig, 
   AiProvider, 
-  DEFAULT_MODELS, 
-  executeAiQuery, 
+  executeAiChat, 
+  ChatMessage,
   LocalNote 
 } from '@cloudnotes/shared-types';
 import { getActiveNotes } from '../../db/client';
 import { 
   Sparkles, 
   Send, 
-  Key, 
-  ShieldCheck, 
-  FileText, 
-  CheckSquare, 
-  Languages 
+  Key 
 } from 'lucide-react-native';
 
 const SECURE_KEY_AI_CONFIG = 'cloudnotes_mobile_ai_config';
@@ -34,13 +30,15 @@ export default function MobileAiScreen() {
   const [config, setConfig] = useState<AiConfig>({
     provider: 'gemini',
     apiKey: '',
-    model: DEFAULT_MODELS.gemini,
+    model: '',
   });
   const [isConfiguring, setIsConfiguring] = useState(false);
   const [activeNotes, setActiveNotes] = useState<LocalNote[]>([]);
-  const [query, setQuery] = useState('');
+  const [inputText, setInputText] = useState('');
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [loading, setLoading] = useState(false);
-  const [response, setResponse] = useState('');
+
+  const scrollViewRef = useRef<ScrollView>(null);
 
   useEffect(() => {
     (async () => {
@@ -71,30 +69,44 @@ export default function MobileAiScreen() {
     Alert.alert('Saved', 'AI Key configured successfully.');
   };
 
-  const runAi = async (action: 'summarize' | 'grammar' | 'action_items' | 'qa') => {
+  const handleSendMessage = async () => {
+    const text = inputText.trim();
+    if (!text || loading) return;
+
     if (!config.apiKey) {
       setIsConfiguring(true);
       return;
     }
 
+    const userMsg: ChatMessage = {
+      id: `user-${Date.now()}`,
+      role: 'user',
+      content: text,
+    };
+
+    const newMessages = [...messages, userMsg];
+    setMessages(newMessages);
+    setInputText('');
     setLoading(true);
-    setResponse('');
 
     try {
-      // Privacy Guard: Strictly exclude locked notes and deleted notes
       const unlockedNotes = activeNotes.filter(n => !n.is_locked && !n.is_deleted);
-      const context = unlockedNotes.map(n => `### ${n.title}\n${n.content}`).join('\n\n---\n\n');
+      const context = unlockedNotes.map(n => `### ${n.title}\n${n.content}`).join('\n\n---\n\n').slice(0, 6000);
 
-      const answer = await executeAiQuery(config, {
-        action,
-        noteContent: context.slice(0, 3000),
-        userQuestion: query,
-        allUnlockedNotesContext: context.slice(0, 6000),
+      const reply = await executeAiChat(config, {
+        messages: newMessages.map(m => ({ role: m.role, content: m.content })),
+        contextNotes: context,
       });
 
-      setResponse(answer);
+      const aiMsg: ChatMessage = {
+        id: `ai-${Date.now()}`,
+        role: 'assistant',
+        content: reply,
+      };
+
+      setMessages(prev => [...prev, aiMsg]);
     } catch (err: any) {
-      Alert.alert('AI Error', err.message);
+      Alert.alert('AI Error', err.message || 'Failed to get response');
     } finally {
       setLoading(false);
     }
@@ -106,11 +118,11 @@ export default function MobileAiScreen() {
       <View style={styles.header}>
         <View style={styles.headerLeft}>
           <View style={styles.sparkleCircle}>
-            <Sparkles size={20} color="#C084FC" />
+            <Sparkles size={18} color="#C084FC" />
           </View>
           <View>
-            <Text style={styles.title}>AI Note Assistant</Text>
-            <Text style={styles.subtitle}>BYOK • Privacy Guard Enabled</Text>
+            <Text style={styles.title}>Ask AI</Text>
+            <Text style={styles.subtitle}>{config.provider.toUpperCase()}</Text>
           </View>
         </View>
 
@@ -125,20 +137,50 @@ export default function MobileAiScreen() {
       {/* Config Drawer */}
       {isConfiguring && (
         <View style={styles.configBox}>
-          <Text style={styles.configTitle}>AI Provider Configuration (BYOK)</Text>
-          <View style={styles.providerRow}>
-            {(['gemini', 'openai', 'groq', 'deepseek'] as AiProvider[]).map(p => (
+          <Text style={styles.configTitle}>API Configuration</Text>
+          <ScrollView 
+            horizontal 
+            showsHorizontalScrollIndicator={false} 
+            contentContainerStyle={styles.providerScroll}
+            style={{ marginBottom: 12 }}
+          >
+            {(['gemini', 'openai', 'anthropic', 'openrouter', 'groq', 'deepseek', 'custom'] as AiProvider[]).map(p => (
               <TouchableOpacity
                 key={p}
                 style={[styles.providerBtn, config.provider === p && styles.providerBtnActive]}
-                onPress={() => setConfig(prev => ({ ...prev, provider: p, model: DEFAULT_MODELS[p] }))}
+                onPress={() => setConfig(prev => ({ 
+                  ...prev, 
+                  provider: p, 
+                  model: '',
+                  customEndpoint: prev.customEndpoint || (p === 'custom' ? 'https://api.openai.com/v1/chat/completions' : undefined)
+                }))}
               >
                 <Text style={[styles.providerBtnText, config.provider === p && styles.providerBtnTextActive]}>
-                  {p.toUpperCase()}
+                  {p === 'anthropic' ? 'CLAUDE' : p.toUpperCase()}
                 </Text>
               </TouchableOpacity>
             ))}
-          </View>
+          </ScrollView>
+
+          {config.provider === 'custom' && (
+            <TextInput
+              value={config.customEndpoint || ''}
+              onChangeText={(val) => setConfig(prev => ({ ...prev, customEndpoint: val }))}
+              placeholder="Endpoint URL (https://.../v1/chat/completions)"
+              placeholderTextColor="#475569"
+              autoCapitalize="none"
+              style={styles.keyInput}
+            />
+          )}
+
+          <TextInput
+            value={config.model || ''}
+            onChangeText={(val) => setConfig(prev => ({ ...prev, model: val }))}
+            placeholder="Model"
+            placeholderTextColor="#475569"
+            autoCapitalize="none"
+            style={styles.keyInput}
+          />
 
           <TextInput
             value={config.apiKey}
@@ -150,65 +192,61 @@ export default function MobileAiScreen() {
           />
 
           <TouchableOpacity style={styles.saveKeyBtn} onPress={handleSaveConfig}>
-            <Text style={styles.saveKeyText}>Save API Key</Text>
+            <Text style={styles.saveKeyText}>Save Configuration</Text>
           </TouchableOpacity>
         </View>
       )}
 
-      {/* Quick Action Pills */}
-      <View style={styles.pillsRow}>
-        <TouchableOpacity style={styles.pill} onPress={() => runAi('summarize')}>
-          <FileText size={14} color="#60A5FA" />
-          <Text style={styles.pillText}>Summarize</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity style={styles.pill} onPress={() => runAi('action_items')}>
-          <CheckSquare size={14} color="#34D399" />
-          <Text style={styles.pillText}>Action Items</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity style={styles.pill} onPress={() => runAi('grammar')}>
-          <Languages size={14} color="#C084FC" />
-          <Text style={styles.pillText}>Polish</Text>
-        </TouchableOpacity>
-      </View>
-
-      {/* Content Area */}
-      <ScrollView style={styles.bodyScroll} contentContainerStyle={styles.bodyContent}>
-        <View style={styles.privacyNote}>
-          <ShieldCheck size={16} color="#10B981" />
-          <Text style={styles.privacyText}>
-            Privacy Guard: Locked notes & trash are never shared with AI.
-          </Text>
-        </View>
-
-        {loading && (
-          <View style={styles.loadingBox}>
-            <ActivityIndicator size="small" color="#F59E0B" />
-            <Text style={styles.loadingText}>Generating AI response...</Text>
+      {/* Messages Scroll Area */}
+      <ScrollView 
+        ref={scrollViewRef}
+        style={styles.bodyScroll} 
+        contentContainerStyle={styles.bodyContent}
+        onContentSizeChange={() => scrollViewRef.current?.scrollToEnd({ animated: true })}
+      >
+        {messages.length === 0 && !loading && (
+          <View style={styles.emptyContainer}>
+            <Sparkles size={28} color="#475569" style={{ opacity: 0.5, marginBottom: 8 }} />
+            <Text style={styles.emptyText}>Start a conversation with AI about your notes.</Text>
           </View>
         )}
 
-        {response ? (
-          <View style={styles.responseCard}>
-            <Text style={styles.responseText}>{response}</Text>
+        {messages.map((m) => {
+          const isUser = m.role === 'user';
+          return (
+            <View 
+              key={m.id} 
+              style={[styles.messageBubble, isUser ? styles.userBubble : styles.aiBubble]}
+            >
+              <Text style={[styles.messageText, isUser ? styles.userText : styles.aiText]}>
+                {m.content}
+              </Text>
+            </View>
+          );
+        })}
+
+        {loading && (
+          <View style={styles.loadingBox}>
+            <ActivityIndicator size="small" color="#C084FC" />
+            <Text style={styles.loadingText}>Thinking...</Text>
           </View>
-        ) : null}
+        )}
       </ScrollView>
 
       {/* Bottom Query Bar */}
       <View style={styles.bottomBar}>
         <TextInput
-          value={query}
-          onChangeText={setQuery}
-          placeholder="Ask anything about unlocked notes..."
+          value={inputText}
+          onChangeText={setInputText}
+          placeholder="Type a message..."
           placeholderTextColor="#64748B"
           style={styles.queryInput}
+          onSubmitEditing={handleSendMessage}
         />
         <TouchableOpacity 
           style={styles.sendBtn} 
-          disabled={loading || !query.trim()}
-          onPress={() => runAi('qa')}
+          disabled={loading || !inputText.trim()}
+          onPress={handleSendMessage}
         >
           <Send size={16} color="#0B0F19" />
         </TouchableOpacity>
@@ -274,17 +312,18 @@ const styles = StyleSheet.create({
     color: '#E2E8F0',
     marginBottom: 10,
   },
-  providerRow: {
+  providerScroll: {
     flexDirection: 'row',
-    gap: 6,
-    marginBottom: 10,
+    gap: 8,
+    paddingVertical: 2,
   },
   providerBtn: {
-    flex: 1,
     paddingVertical: 8,
+    paddingHorizontal: 14,
     backgroundColor: '#1E293B',
     borderRadius: 8,
     alignItems: 'center',
+    justifyContent: 'center',
   },
   providerBtnActive: {
     backgroundColor: 'rgba(245, 158, 11, 0.25)',
@@ -320,74 +359,59 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: '#0B0F19',
   },
-  pillsRow: {
-    flexDirection: 'row',
-    paddingHorizontal: 20,
-    paddingVertical: 10,
-    gap: 8,
-    borderBottomWidth: 1,
-    borderBottomColor: '#1E293B',
-    backgroundColor: '#111827',
-  },
-  pill: {
-    flexDirection: 'row',
+  emptyContainer: {
     alignItems: 'center',
-    gap: 6,
-    backgroundColor: '#1E293B',
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 10,
+    justifyContent: 'center',
+    paddingVertical: 60,
   },
-  pillText: {
+  emptyText: {
     fontSize: 12,
-    color: '#E2E8F0',
+    color: '#64748B',
+    textAlign: 'center',
+  },
+  messageBubble: {
+    maxWidth: '85%',
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 16,
+    marginBottom: 10,
+  },
+  userBubble: {
+    alignSelf: 'flex-end',
+    backgroundColor: '#F59E0B',
+    borderBottomRightRadius: 4,
+  },
+  aiBubble: {
+    alignSelf: 'flex-start',
+    backgroundColor: '#1E293B',
+    borderBottomLeftRadius: 4,
+  },
+  messageText: {
+    fontSize: 13,
+    lineHeight: 19,
+  },
+  userText: {
+    color: '#0B0F19',
     fontWeight: '600',
+  },
+  aiText: {
+    color: '#F8FAFC',
   },
   bodyScroll: {
     flex: 1,
   },
   bodyContent: {
-    padding: 20,
-  },
-  privacyNote: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    backgroundColor: '#111827',
-    padding: 12,
-    borderRadius: 12,
-    marginBottom: 16,
-    borderWidth: 1,
-    borderColor: '#1E293B',
-  },
-  privacyText: {
-    fontSize: 11,
-    color: '#94A3B8',
-    flex: 1,
+    padding: 16,
   },
   loadingBox: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
     gap: 8,
-    paddingVertical: 20,
+    paddingVertical: 8,
   },
   loadingText: {
-    fontSize: 13,
-    color: '#F59E0B',
-    fontWeight: '600',
-  },
-  responseCard: {
-    backgroundColor: '#111827',
-    borderRadius: 16,
-    padding: 16,
-    borderWidth: 1,
-    borderColor: '#1E293B',
-  },
-  responseText: {
-    fontSize: 14,
-    color: '#E2E8F0',
-    lineHeight: 22,
+    fontSize: 12,
+    color: '#94A3B8',
   },
   bottomBar: {
     flexDirection: 'row',

@@ -1,9 +1,9 @@
 /**
- * BYOK AI Note Assistant Module
- * Supports Google Gemini, OpenAI, Groq, DeepSeek, and custom OpenAI-compatible endpoints.
+ * BYOK AI Chat Assistant Module
+ * Supports Google Gemini, OpenAI, Anthropic Claude, OpenRouter, Groq, DeepSeek, and Custom endpoints.
  */
 
-export type AiProvider = 'gemini' | 'openai' | 'groq' | 'deepseek' | 'custom';
+export type AiProvider = 'gemini' | 'openai' | 'anthropic' | 'openrouter' | 'groq' | 'deepseek' | 'custom';
 
 export interface AiConfig {
   provider: AiProvider;
@@ -15,96 +15,103 @@ export interface AiConfig {
 export const DEFAULT_MODELS: Record<AiProvider, string> = {
   gemini: 'gemini-2.0-flash',
   openai: 'gpt-4o-mini',
+  anthropic: 'claude-3-5-haiku-20241022',
+  openrouter: 'anthropic/claude-3.5-haiku',
   groq: 'llama-3.3-70b-versatile',
   deepseek: 'deepseek-chat',
-  custom: 'default',
+  custom: 'gpt-4o-mini',
 };
 
-export interface AiPromptRequest {
-  action: 'summarize' | 'grammar' | 'action_items' | 'qa';
-  noteContent?: string;
-  userQuestion?: string;
-  allUnlockedNotesContext?: string;
+export interface ChatMessage {
+  id: string;
+  role: 'user' | 'assistant';
+  content: string;
+}
+
+export interface AiChatRequest {
+  messages: { role: 'user' | 'assistant'; content: string }[];
+  contextNotes?: string;
 }
 
 /**
- * Build appropriate AI prompt according to the requested action
+ * Execute multi-turn conversational AI chat
  */
-export function buildPrompt(req: AiPromptRequest): { systemInstruction: string; userMessage: string } {
-  const systemInstruction = `You are CloudNotes AI Assistant, a concise, privacy-conscious productivity assistant. Provide clear, accurate answers formatted in clean markdown. Always respond in the same language as the user or note content unless instructed otherwise.`;
-
-  switch (req.action) {
-    case 'summarize':
-      return {
-        systemInstruction,
-        userMessage: `Please summarize the following note content into key takeaways with bullet points:\n\n${req.noteContent || ''}`,
-      };
-    case 'grammar':
-      return {
-        systemInstruction,
-        userMessage: `Please fix any spelling, punctuation, and grammar issues in the following note content while preserving its original meaning and tone:\n\n${req.noteContent || ''}`,
-      };
-    case 'action_items':
-      return {
-        systemInstruction,
-        userMessage: `Extract all actionable tasks, to-dos, and deadlines from this note as a markdown task list (- [ ] Task):\n\n${req.noteContent || ''}`,
-      };
-    case 'qa':
-      return {
-        systemInstruction,
-        userMessage: `Context from user notes (only unlocked notes):\n${req.allUnlockedNotesContext || 'No additional notes.'}\n\nUser Question: ${req.userQuestion || ''}`,
-      };
-  }
-}
-
-/**
- * Execute AI generation across any of the supported providers
- */
-export async function executeAiQuery(config: AiConfig, request: AiPromptRequest): Promise<string> {
+export async function executeAiChat(config: AiConfig, request: AiChatRequest): Promise<string> {
   const { apiKey, provider } = config;
   if (!apiKey || !apiKey.trim()) {
     throw new Error(`API key is required for provider: ${provider}`);
   }
 
-  const { systemInstruction, userMessage } = buildPrompt(request);
   const model = config.model || DEFAULT_MODELS[provider];
+  const systemPrompt = request.contextNotes
+    ? `You are CloudNotes Assistant, a concise, helpful assistant. Format replies in clean markdown. Reply in the same language as the user.\n\nUser unlocked notes context:\n${request.contextNotes}`
+    : `You are CloudNotes Assistant, a concise, helpful assistant. Format replies in clean markdown. Reply in the same language as the user.`;
 
+  // 1. Google Gemini
   if (provider === 'gemini') {
     const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
-    const payload = {
-      systemInstruction: {
-        parts: [{ text: systemInstruction }],
-      },
-      contents: [
-        {
-          role: 'user',
-          parts: [{ text: userMessage }],
-        },
-      ],
-      generationConfig: {
-        temperature: 0.4,
-      },
-    };
+    const contents = request.messages.map(m => ({
+      role: m.role === 'user' ? 'user' : 'model',
+      parts: [{ text: m.content }],
+    }));
 
     const res = await fetch(url, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
+      body: JSON.stringify({
+        systemInstruction: { parts: [{ text: systemPrompt }] },
+        contents,
+        generationConfig: { temperature: 0.5 },
+      }),
     });
 
     if (!res.ok) {
       const errText = await res.text();
-      throw new Error(`Gemini API error (${res.status}): ${errText}`);
+      throw new Error(`Gemini error (${res.status}): ${errText}`);
     }
 
     const data = await res.json();
-    const candidate = data.candidates?.[0]?.content?.parts?.[0]?.text;
-    return candidate || 'No response generated from Gemini.';
+    return data.candidates?.[0]?.content?.parts?.[0]?.text || 'No response generated.';
   }
 
-  // OpenAI / Groq / DeepSeek / Custom (all follow OpenAI-compatible chat completions)
+  // 2. Anthropic Claude (Messages API)
+  if (provider === 'anthropic') {
+    const url = 'https://api.anthropic.com/v1/messages';
+    const messages = request.messages.map(m => ({
+      role: m.role,
+      content: m.content,
+    }));
+
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': apiKey,
+        'anthropic-version': '2023-06-01',
+        'anthropic-dangerous-direct-browser-access': 'true',
+      },
+      body: JSON.stringify({
+        model,
+        max_tokens: 1024,
+        system: systemPrompt,
+        messages,
+      }),
+    });
+
+    if (!res.ok) {
+      const errText = await res.text();
+      throw new Error(`Claude error (${res.status}): ${errText}`);
+    }
+
+    const data = await res.json();
+    return data.content?.[0]?.text || 'No response generated.';
+  }
+
+  // 3. OpenAI / OpenRouter / Groq / DeepSeek / Custom (OpenAI-compatible)
   let endpoint = 'https://api.openai.com/v1/chat/completions';
-  if (provider === 'groq') {
+  if (provider === 'openrouter') {
+    endpoint = 'https://openrouter.ai/api/v1/chat/completions';
+  } else if (provider === 'groq') {
     endpoint = 'https://api.groq.com/openai/v1/chat/completions';
   } else if (provider === 'deepseek') {
     endpoint = 'https://api.deepseek.com/chat/completions';
@@ -112,27 +119,57 @@ export async function executeAiQuery(config: AiConfig, request: AiPromptRequest)
     endpoint = config.customEndpoint;
   }
 
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+    Authorization: `Bearer ${apiKey}`,
+  };
+
+  if (provider === 'openrouter') {
+    headers['HTTP-Referer'] = 'https://cloudnotes.app';
+    headers['X-Title'] = 'CloudNotes';
+  }
+
   const res = await fetch(endpoint, {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${apiKey}`,
-    },
+    headers,
     body: JSON.stringify({
       model,
       messages: [
-        { role: 'system', content: systemInstruction },
-        { role: 'user', content: userMessage },
+        { role: 'system', content: systemPrompt },
+        ...request.messages.map(m => ({ role: m.role, content: m.content })),
       ],
-      temperature: 0.4,
+      temperature: 0.5,
     }),
   });
 
   if (!res.ok) {
     const errText = await res.text();
-    throw new Error(`${provider.toUpperCase()} API error (${res.status}): ${errText}`);
+    throw new Error(`${provider.toUpperCase()} error (${res.status}): ${errText}`);
   }
 
   const data = await res.json();
   return data.choices?.[0]?.message?.content || 'No response generated.';
 }
+
+/**
+ * Backward-compatible helper for single prompt execution
+ */
+export async function executeAiQuery(
+  config: AiConfig,
+  request: {
+    userQuestion?: string;
+    allUnlockedNotesContext?: string;
+    action?: string;
+    noteContent?: string;
+    messages?: { role: 'user' | 'assistant'; content: string }[];
+  }
+): Promise<string> {
+  const userText = request.userQuestion || request.noteContent || 'Ping';
+  const messages = request.messages || [{ role: 'user', content: userText }];
+
+  return executeAiChat(config, {
+    messages,
+    contextNotes: request.allUnlockedNotesContext,
+  });
+}
+

@@ -314,7 +314,8 @@ export function useNotes() {
         if (selectedTag === 'archive' || selectedTag === 'archived') {
           return Boolean(n.is_archived);
         }
-        return n.is_archived === 0;
+        // Home tab: only active, non-archived and unlocked notes
+        return n.is_archived === 0 && !Boolean(n.is_locked);
       })
       .filter(n => {
         if (!searchQuery.trim()) return true;
