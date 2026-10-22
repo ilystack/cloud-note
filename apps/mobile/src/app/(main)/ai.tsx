@@ -19,7 +19,7 @@ import {
 } from '@cloudnotes/shared-types';
 import { getActiveNotes } from '../../db/client';
 import { 
-  Sparkles, 
+  Bot, 
   Send, 
   Key 
 } from 'lucide-react-native';
@@ -118,7 +118,7 @@ export default function MobileAiScreen() {
       <View style={styles.header}>
         <View style={styles.headerLeft}>
           <View style={styles.sparkleCircle}>
-            <Sparkles size={18} color="#C084FC" />
+            <Bot size={18} color="#C084FC" />
           </View>
           <View>
             <Text style={styles.title}>Ask AI</Text>
@@ -206,7 +206,7 @@ export default function MobileAiScreen() {
       >
         {messages.length === 0 && !loading && (
           <View style={styles.emptyContainer}>
-            <Sparkles size={28} color="#475569" style={{ opacity: 0.5, marginBottom: 8 }} />
+            <Bot size={28} color="#C084FC" style={{ opacity: 0.6, marginBottom: 8 }} />
             <Text style={styles.emptyText}>Start a conversation with AI about your notes.</Text>
           </View>
         )}

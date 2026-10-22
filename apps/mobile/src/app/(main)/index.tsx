@@ -5,14 +5,13 @@ import {
   ScrollView, 
   RefreshControl, 
   TouchableOpacity, 
-  TextInput, 
   StyleSheet,
   Modal,
   Alert,
   Animated,
   Easing
 } from 'react-native';
-import { useRouter } from 'expo-router';
+import { BlurView } from 'expo-blur';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LocalNote } from '@cloudnotes/shared-types';
 import { 
@@ -24,15 +23,21 @@ import {
   toggleArchiveLocalNote 
 } from '../../db/client';
 import { syncMobileWithServer, subscribeSyncState, SyncState } from '../../services/syncService';
+import { getPocketBase } from '../../services/api';
 import { 
   hasMasterPin, 
   verifyMasterPin, 
   authenticateWithBiometrics 
 } from '../../services/pinService';
 import { AnimatedNotesTitle } from '../../components/AnimatedNotesTitle';
+import { PillFilterTabs, CategoryTab } from '../../components/PillFilterTabs';
 import { NoteBentoCard } from '../../components/NoteBentoCard';
 import { CurvedBottomBar } from '../../components/CurvedBottomBar';
 import { StealthPinPad } from '../../components/StealthPinPad';
+import { ServerModal } from '../../components/ServerModal';
+import { AiModal } from '../../components/AiModal';
+import { SearchModal } from '../../components/SearchModal';
+import { NoteEditorModal } from '../../components/NoteEditorModal';
 import { 
   Search, 
   RefreshCw, 
@@ -46,23 +51,19 @@ import {
   KeyRound
 } from 'lucide-react-native';
 
-export type CategoryTab = 'home' | 'vault' | 'archived' | 'trash';
-
-const CATEGORY_TABS: { id: CategoryTab; label: string }[] = [
-  { id: 'home', label: 'HOME' },
-  { id: 'vault', label: 'VAULT' },
-  { id: 'archived', label: 'ARCHIVED' },
-  { id: 'trash', label: 'TRASH' },
-];
-
 export default function DashboardScreen() {
-  const router = useRouter();
   const [activeNotes, setActiveNotes] = useState<LocalNote[]>([]);
   const [trashNotes, setTrashNotes] = useState<LocalNote[]>([]);
   const [activeTab, setActiveTab] = useState<CategoryTab>('home');
-  const [searchQuery, setSearchQuery] = useState<string>('');
   const [refreshing, setRefreshing] = useState<boolean>(false);
   const [syncState, setSyncState] = useState<SyncState>('idle');
+
+  // In-App Modals
+  const [isServerModalOpen, setIsServerModalOpen] = useState<boolean>(false);
+  const [isAiModalOpen, setIsAiModalOpen] = useState<boolean>(false);
+  const [isSearchModalOpen, setIsSearchModalOpen] = useState<boolean>(false);
+  const [isEditorOpen, setIsEditorOpen] = useState<boolean>(false);
+  const [editingNote, setEditingNote] = useState<LocalNote | null>(null);
 
   // Vault PIN Session State
   const [isVaultUnlocked, setIsVaultUnlocked] = useState<boolean>(false);
@@ -118,32 +119,43 @@ export default function DashboardScreen() {
     setRefreshing(false);
   };
 
-  const handleSelectTab = async (tab: CategoryTab) => {
-    if (tab === 'vault' && !isVaultUnlocked) {
-      const exists = await hasMasterPin();
-      if (!exists) {
-        Alert.alert(
-          'Stealth PIN Setup Required',
-          'You need to create a Stealth PIN first to access the Vault.',
-          [
-            { text: 'Cancel', style: 'cancel' },
-            { text: 'Setup PIN', onPress: () => router.push('/(auth)/pin' as any) },
-          ]
-        );
-        return;
-      }
-
-      // Try biometrics first for instant smooth unlock
-      const bioSuccess = await authenticateWithBiometrics();
-      if (bioSuccess) {
-        setIsVaultUnlocked(true);
-        setActiveTab('vault');
-        return;
-      }
-
-      // Open Stealth PIN keypad modal
-      setIsPinModalOpen(true);
+  // Auth Gatekeeper matching Web: if not logged in, prompt Server Login modal
+  const requireAuth = async (action: () => void) => {
+    const pb = await getPocketBase();
+    if (!pb.authStore.isValid) {
+      setIsServerModalOpen(true);
       return;
+    }
+    action();
+  };
+
+  const handleSelectTab = async (tab: CategoryTab) => {
+    if (tab === 'vault') {
+      const pb = await getPocketBase();
+      if (!pb.authStore.isValid) {
+        setIsServerModalOpen(true);
+        return;
+      }
+
+      if (!isVaultUnlocked) {
+        const exists = await hasMasterPin();
+        if (!exists) {
+          setIsPinModalOpen(true);
+          return;
+        }
+
+        // Try biometrics first for instant smooth unlock
+        const bioSuccess = await authenticateWithBiometrics();
+        if (bioSuccess) {
+          setIsVaultUnlocked(true);
+          setActiveTab('vault');
+          return;
+        }
+
+        // Open Stealth PIN keypad modal
+        setIsPinModalOpen(true);
+        return;
+      }
     }
 
     // Auto re-lock session when navigating away from vault
@@ -160,7 +172,8 @@ export default function DashboardScreen() {
       setIsPinModalOpen(false);
       setActiveTab('vault');
       if (pendingNoteToOpen) {
-        router.push({ pathname: '/(main)/editor' as any, params: { id: pendingNoteToOpen.id } });
+        setEditingNote(pendingNoteToOpen);
+        setIsEditorOpen(true);
         setPendingNoteToOpen(null);
       }
       return;
@@ -172,7 +185,8 @@ export default function DashboardScreen() {
       setIsPinModalOpen(false);
       setActiveTab('vault');
       if (pendingNoteToOpen) {
-        router.push({ pathname: '/(main)/editor' as any, params: { id: pendingNoteToOpen.id } });
+        setEditingNote(pendingNoteToOpen);
+        setIsEditorOpen(true);
         setPendingNoteToOpen(null);
       }
     } else {
@@ -186,7 +200,8 @@ export default function DashboardScreen() {
       setIsPinModalOpen(true);
       return;
     }
-    router.push({ pathname: '/(main)/editor' as any, params: { id: note.id } });
+    setEditingNote(note);
+    setIsEditorOpen(true);
   };
 
   const handleDelete = async (noteId: string) => {
@@ -238,88 +253,68 @@ export default function DashboardScreen() {
     displayedNotes = trashNotes;
   }
 
-  // Filter by search query
-  const filteredNotes = displayedNotes.filter(n => {
-    if (!searchQuery.trim()) return true;
-    const q = searchQuery.toLowerCase();
-    return (n.title || '').toLowerCase().includes(q) || (n.excerpt || '').toLowerCase().includes(q);
-  });
-
   // Dynamic Bento row grouping:
   // - If a note is alone in its row (e.g. single item, or odd trailing item): 1 full-width card ('full')
   // - If paired: 2 equal compact cards side-by-side ('compact')
   const rows: LocalNote[][] = [];
-  for (let i = 0; i < filteredNotes.length; i += 2) {
-    if (i + 1 < filteredNotes.length) {
-      rows.push([filteredNotes[i], filteredNotes[i + 1]]);
+  for (let i = 0; i < displayedNotes.length; i += 2) {
+    if (i + 1 < displayedNotes.length) {
+      rows.push([displayedNotes[i], displayedNotes[i + 1]]);
     } else {
-      rows.push([filteredNotes[i]]);
+      rows.push([displayedNotes[i]]);
     }
   }
 
   return (
     <SafeAreaView style={styles.safeArea}>
-      {/* Top Header: MY NOTES on left, SYNC on right */}
+      {/* Top Header: My Notes on left, Search Icon & Sync Status on right */}
       <View style={styles.header}>
         <AnimatedNotesTitle />
 
-        <TouchableOpacity 
-          style={styles.syncBtn} 
-          onPress={onRefresh}
-          activeOpacity={0.75}
-        >
-          <Text style={styles.syncBtnText}>SYNC</Text>
-          {syncState === 'syncing' ? (
-            <Animated.View style={{ transform: [{ rotate: spinInterpolate }] }}>
-              <RefreshCw size={14} color="#F59E0B" />
-            </Animated.View>
-          ) : syncState === 'idle' ? (
-            <CheckCircle size={14} color="#10B981" />
-          ) : (
-            <CloudOff size={14} color="#64748B" />
-          )}
-        </TouchableOpacity>
-      </View>
-
-      {/* Category Tabs: HOME | VAULT | ARCHIVED | TRASH */}
-      <View style={styles.tabsContainer}>
-        {CATEGORY_TABS.map(tab => {
-          const isActive = activeTab === tab.id;
-          return (
-            <TouchableOpacity
-              key={tab.id}
-              activeOpacity={0.7}
-              onPress={() => handleSelectTab(tab.id)}
-              style={[
-                styles.tabPill,
-                isActive && styles.tabPillActive,
-              ]}
-            >
-              <Text style={[styles.tabLabel, isActive && styles.tabLabelActive]}>
-                {tab.label}
-              </Text>
-            </TouchableOpacity>
-          );
-        })}
-      </View>
-
-      {/* Search Input */}
-      <View style={styles.searchContainer}>
-        <Search size={16} color="#64748B" style={styles.searchIcon} />
-        <TextInput
-          value={searchQuery}
-          onChangeText={setSearchQuery}
-          placeholder={`Search ${activeTab} notes...`}
-          placeholderTextColor="#64748B"
-          style={styles.searchInput}
-          returnKeyType="search"
-        />
-        {searchQuery.length > 0 && (
-          <TouchableOpacity onPress={() => setSearchQuery('')} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-            <X size={15} color="#94A3B8" />
+        <View style={styles.headerRightActions}>
+          {/* Search Icon Button: Opens Full-Screen Search View */}
+          <TouchableOpacity 
+            style={styles.searchIconBtn} 
+            onPress={() => setIsSearchModalOpen(true)}
+            activeOpacity={0.75}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          >
+            <Search size={16} color="#94A3B8" />
           </TouchableOpacity>
-        )}
+
+          {/* Sync Status Button */}
+          <TouchableOpacity 
+            style={styles.syncStatusWidget} 
+            onPress={onRefresh}
+            activeOpacity={0.75}
+          >
+            {syncState === 'syncing' ? (
+              <>
+                <Animated.View style={{ transform: [{ rotate: spinInterpolate }] }}>
+                  <RefreshCw size={13} color="#F59E0B" />
+                </Animated.View>
+                <Text style={[styles.syncStatusText, { color: '#F59E0B' }]}>Syncing...</Text>
+              </>
+            ) : syncState === 'idle' ? (
+              <>
+                <CheckCircle size={13} color="#10B981" />
+                <Text style={[styles.syncStatusText, { color: '#10B981' }]}>Synced</Text>
+              </>
+            ) : (
+              <>
+                <CloudOff size={13} color="#64748B" />
+                <Text style={[styles.syncStatusText, { color: '#64748B' }]}>Offline</Text>
+              </>
+            )}
+          </TouchableOpacity>
+        </View>
       </View>
+
+      {/* Filter Tabs: Clean row with active pill only, NO background container */}
+      <PillFilterTabs
+        activeTab={activeTab}
+        onSelectTab={handleSelectTab}
+      />
 
       {/* Main Content Scroll View */}
       <ScrollView
@@ -341,14 +336,14 @@ export default function DashboardScreen() {
             </Text>
             <TouchableOpacity
               style={styles.unlockBtn}
-              onPress={() => setIsPinModalOpen(true)}
+              onPress={() => requireAuth(() => setIsPinModalOpen(true))}
               activeOpacity={0.85}
             >
               <KeyRound size={16} color="#0B0F19" />
               <Text style={styles.unlockBtnText}>Unlock Vault</Text>
             </TouchableOpacity>
           </View>
-        ) : filteredNotes.length === 0 ? (
+        ) : displayedNotes.length === 0 ? (
           /* Empty State */
           <View style={styles.emptyContainer}>
             <View style={styles.emptyIconCircle}>
@@ -363,9 +358,7 @@ export default function DashboardScreen() {
               )}
             </View>
             <Text style={styles.emptyTitle}>
-              {searchQuery.trim()
-                ? 'No matching notes'
-                : activeTab === 'vault'
+              {activeTab === 'vault'
                 ? 'Stealth Vault is Empty'
                 : activeTab === 'archived'
                 ? 'No Archived Notes'
@@ -374,12 +367,10 @@ export default function DashboardScreen() {
                 : 'No Notes Yet'}
             </Text>
             <Text style={styles.emptySubtitle}>
-              {searchQuery.trim()
-                ? `No notes match "${searchQuery}". Try a different keyword.`
-                : activeTab === 'vault'
+              {activeTab === 'vault'
                 ? 'You have not locked any notes yet.'
                 : activeTab === 'archived'
-                ? 'Archived notes will be stored here.'
+                ? 'Notes you archive will appear here.'
                 : activeTab === 'trash'
                 ? 'Deleted notes will be preserved here before permanent purge.'
                 : 'Tap the + button below to create your very first note.'}
@@ -397,6 +388,7 @@ export default function DashboardScreen() {
                       note={row[0]}
                       variant="compact"
                       isTrash={activeTab === 'trash'}
+                      isVaultUnlocked={isVaultUnlocked}
                       onPress={() => handleOpenNote(row[0])}
                       onDelete={() => handleDelete(row[0].id)}
                       onArchiveToggle={() => handleArchiveToggle(row[0])}
@@ -406,6 +398,7 @@ export default function DashboardScreen() {
                       note={row[1]}
                       variant="compact"
                       isTrash={activeTab === 'trash'}
+                      isVaultUnlocked={isVaultUnlocked}
                       onPress={() => handleOpenNote(row[1])}
                       onDelete={() => handleDelete(row[1].id)}
                       onArchiveToggle={() => handleArchiveToggle(row[1])}
@@ -422,6 +415,7 @@ export default function DashboardScreen() {
                     note={row[0]}
                     variant="full"
                     isTrash={activeTab === 'trash'}
+                    isVaultUnlocked={isVaultUnlocked}
                     onPress={() => handleOpenNote(row[0])}
                     onDelete={() => handleDelete(row[0].id)}
                     onArchiveToggle={() => handleArchiveToggle(row[0])}
@@ -434,11 +428,38 @@ export default function DashboardScreen() {
         )}
       </ScrollView>
 
-      {/* Curved Notched Bottom Navigation Bar */}
+      {/* Floating Curved Notched Bottom Navigation Bar with Deep Scoop & Big 72px FAB */}
       <CurvedBottomBar
-        onPressAdd={() => router.push('/(main)/editor' as any)}
-        onPressAi={() => router.push('/(main)/ai' as any)}
-        onPressProfile={() => router.push('/(auth)/server' as any)}
+        onPressAdd={() => {
+          setEditingNote(null);
+          setIsEditorOpen(true);
+        }}
+        onPressAi={() => requireAuth(() => setIsAiModalOpen(true))}
+        onPressProfile={() => setIsServerModalOpen(true)}
+      />
+
+      {/* Full-Screen Search Modal */}
+      <SearchModal
+        visible={isSearchModalOpen}
+        notes={activeNotes}
+        isVaultUnlocked={isVaultUnlocked}
+        onClose={() => setIsSearchModalOpen(false)}
+        onOpenNote={handleOpenNote}
+        onDeleteNote={handleDelete}
+        onArchiveToggle={handleArchiveToggle}
+      />
+
+      {/* Server & Profile Modal (Auth Gatekeeper & Account Settings) */}
+      <ServerModal
+        visible={isServerModalOpen}
+        onClose={() => setIsServerModalOpen(false)}
+        onLoginSuccess={loadData}
+      />
+
+      {/* AI Assistant In-App Modal */}
+      <AiModal
+        visible={isAiModalOpen}
+        onClose={() => setIsAiModalOpen(false)}
       />
 
       {/* Stealth Vault PIN Modal */}
@@ -452,6 +473,15 @@ export default function DashboardScreen() {
         }}
       >
         <View style={styles.modalBackdrop}>
+          <BlurView intensity={75} tint="dark" style={StyleSheet.absoluteFill} />
+          <TouchableOpacity
+            style={StyleSheet.absoluteFill}
+            onPress={() => {
+              setIsPinModalOpen(false);
+              setPendingNoteToOpen(null);
+            }}
+            activeOpacity={1}
+          />
           <View style={styles.modalContainer}>
             <TouchableOpacity
               style={styles.modalCloseBtn}
@@ -473,6 +503,17 @@ export default function DashboardScreen() {
           </View>
         </View>
       </Modal>
+      {/* Full-Screen Note Editor Modal (Slides up from bottom natively like login modal) */}
+      <NoteEditorModal
+        visible={isEditorOpen}
+        note={editingNote}
+        onClose={() => {
+          setIsEditorOpen(false);
+          setEditingNote(null);
+        }}
+        onSaveSuccess={loadData}
+        onDeleteSuccess={loadData}
+      />
     </SafeAreaView>
   );
 }
@@ -485,83 +526,48 @@ const styles = StyleSheet.create({
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'center',
+    alignItems: 'flex-start',
     paddingHorizontal: 20,
-    paddingTop: 8,
-    paddingBottom: 6,
+    paddingTop: 8, // shifted title upward slightly
+    paddingBottom: 8,
   },
-  syncBtn: {
+  headerRightActions: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 7,
-    backgroundColor: '#111827',
-    paddingHorizontal: 12,
-    paddingVertical: 7,
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: '#1E293B',
-  },
-  syncBtnText: {
-    fontSize: 11,
-    fontWeight: '800',
-    color: '#F8FAFC',
-    letterSpacing: 1.2,
-  },
-  tabsContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 20,
-    marginTop: 10,
-    marginBottom: 8,
-  },
-  tabPill: {
-    paddingHorizontal: 13,
-    paddingVertical: 6,
-    borderRadius: 20,
-    borderWidth: 1.5,
-    borderColor: 'transparent',
-    backgroundColor: 'transparent',
-  },
-  tabPillActive: {
-    borderColor: '#F59E0B',
-    backgroundColor: 'rgba(245, 158, 11, 0.12)',
-  },
-  tabLabel: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: '#64748B',
-    letterSpacing: 0.6,
-  },
-  tabLabelActive: {
-    color: '#F59E0B',
-    fontWeight: '800',
-  },
-  searchContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#111827',
-    marginHorizontal: 20,
+    gap: 8,
     marginTop: 6,
-    marginBottom: 10,
-    borderRadius: 14,
-    paddingHorizontal: 12,
+  },
+  searchIconBtn: {
+    width: 34,
+    height: 34,
+    borderRadius: 12,
+    backgroundColor: '#11151F',
+    alignItems: 'center',
+    justifyContent: 'center',
     borderWidth: 1,
     borderColor: '#1E293B',
   },
-  searchIcon: {
-    marginRight: 8,
+  syncStatusWidget: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    backgroundColor: '#11151F',
+    paddingHorizontal: 9,
+    paddingVertical: 6,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#1E293B',
   },
-  searchInput: {
-    flex: 1,
-    height: 38,
-    color: '#F8FAFC',
-    fontSize: 13.5,
+  syncStatusText: {
+    fontSize: 11,
+    fontFamily: 'System',
+    fontWeight: '600',
+    letterSpacing: 0.2,
   },
   scrollContent: {
     paddingHorizontal: 20,
-    paddingTop: 6,
-    paddingBottom: 120, // ensure last card is never covered by curved bottom bar
+    paddingTop: 4,
+    paddingBottom: 130, // room for floating curved bar
   },
   gridContainer: {
     width: '100%',
@@ -585,7 +591,7 @@ const styles = StyleSheet.create({
     width: 64,
     height: 64,
     borderRadius: 22,
-    backgroundColor: '#111827',
+    backgroundColor: '#11151F',
     borderWidth: 1,
     borderColor: '#1E293B',
     alignItems: 'center',
@@ -606,7 +612,7 @@ const styles = StyleSheet.create({
     lineHeight: 19,
   },
   lockedContainer: {
-    backgroundColor: '#111827',
+    backgroundColor: '#11151F',
     borderRadius: 22,
     borderWidth: 1,
     borderColor: '#1E293B',
@@ -655,7 +661,7 @@ const styles = StyleSheet.create({
   },
   modalBackdrop: {
     flex: 1,
-    backgroundColor: 'rgba(3, 7, 18, 0.85)',
+    backgroundColor: 'rgba(3, 7, 18, 0.45)',
     justifyContent: 'center',
     alignItems: 'center',
     padding: 20,

@@ -32,14 +32,14 @@
 
 ---
 
-## 🔗 Integrasi Mobile & Web
+## 🔗 Integrasi Android & Web
 
-Sistem dirancang dengan integrasi mulus antara aplikasi Mobile (Expo React Native) dan Web (React + Vite):
-- **Universal Backend:** Baik Mobile maupun Web terhubung ke PocketBase instance yang sama.
+Sistem dirancang dengan integrasi mulus antara aplikasi Android (Expo React Native) dan Web (React + Vite):
+- **Universal Backend:** Baik Android maupun Web terhubung ke PocketBase instance yang sama.
 - **Deterministic Conflict Resolution (LWW):** Logika sinkronisasi dua arah otomatis mendeteksi perubahan terbaru berdasarkan timestamp `client_updated_at` dan `version` revisi catatan.
 - **Anti-Data-Loss Protection:** Data lokal tidak pernah dihapus secara sepihak hanya karena respon query server kosong; penghapusan memerlukan tombstone soft-delete eksplisit (`is_deleted: true`).
-- **Cross-Platform Crypto Unlocking:** Catatan yang dikunci di Web dapat langsung didekripsi di Mobile dengan PIN yang sama, dan sebaliknya.
-- **Lossless Server Media Access:** Gambar atau dokumen yang diunggah dari ponsel langsung dapat diakses dan di-render di browser web melalui URL server terstandarisasi `/api/files/notes/:id/:filename`.
+- **Cross-Platform Crypto Unlocking:** Catatan yang dikunci di Web dapat langsung didekripsi di Android dengan PIN yang sama, dan sebaliknya.
+- **Lossless Server Media Access:** Gambar atau dokumen yang diunggah dari ponsel Android langsung dapat diakses dan di-render di browser web melalui URL server terstandarisasi `/api/files/notes/:id/:filename`.
 - **Integrated Drawing:** Sketsa tangan diserialisasi sebagai format vector / SVG yang kompatibel di kedua platform.
 
 ---
@@ -89,15 +89,15 @@ npm run dev:web
 - Klik icon **Server / Connect** di pojok kanan atas, klik **Test** (`http://127.0.0.1:8090`).
 - Buat akun pengguna di tab **Register** (misal: `user@example.com` / `password123`).
 
-### Terminal 3: Jalankan Mobile App (Expo)
+### Terminal 3: Jalankan Android App (Expo)
 ```bash
-npm run dev:mobile
+npm run dev:android
 ```
-- Scan QR code via aplikasi **Expo Go** di HP atau jalankan di Android/iOS emulator (`a` / `i`).
-- **Konfigurasi URL Server di Mobile:**
-  - **HP Fisik (Expo Go):** Masukkan IP LAN laptop Anda (misal: `http://192.168.1.5:8090`, cek via `ipconfig`).
+*(atau `npm run dev:mobile`)*
+- Scan QR code via aplikasi **Expo Go** di HP Android Anda atau tekan `a` untuk Android Emulator.
+- **Konfigurasi URL Server di Android:**
+  - **HP Fisik Android (Expo Go):** Masukkan IP LAN laptop Anda (misal: `http://192.168.1.5:8090`, cek via `ipconfig`).
   - **Android Emulator:** Masukkan `http://10.0.2.2:8090`.
-  - **iOS Simulator:** Masukkan `http://127.0.0.1:8090`.
 - Login dengan akun yang sama seperti di Web.
 
 ---

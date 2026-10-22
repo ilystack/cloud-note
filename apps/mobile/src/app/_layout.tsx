@@ -30,8 +30,9 @@ export default function RootLayout() {
         <Stack.Screen 
           name="(main)/editor" 
           options={{ 
-            title: 'Note Editor',
-            presentation: 'modal',
+            headerShown: false,
+            presentation: 'fullScreenModal',
+            animation: 'slide_from_bottom',
           }} 
         />
         <Stack.Screen 

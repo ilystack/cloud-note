@@ -11,7 +11,7 @@
     "server": ".\\database\\pocketbase.exe serve --http=0.0.0.0:8090 --dir=database/pb_data --publicDir=database/pb_public --migrationsDir=database/pb_migrations",
     "dev:web": "npm run dev --workspace=apps/web",
     "build:web": "npm run build --workspace=apps/web",
-    "dev:mobile": "npm run start --workspace=apps/mobile",
+    "dev:android": "npm run start --workspace=apps/mobile",
     "test": "vitest run",
     "typecheck": "npm run typecheck --workspaces --if-present",
     "postinstall": "node apps/mobile/scripts/patch-expo-sqlite.js"

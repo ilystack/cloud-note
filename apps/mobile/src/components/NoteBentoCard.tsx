@@ -10,27 +10,47 @@ import { getPaletteByColor } from '@cloudnotes/design-system';
 import { 
   FileText, 
   Lock, 
+  Unlock,
   Paperclip, 
   Trash2, 
   Archive, 
   ArchiveRestore, 
-  RotateCcw
+  RotateCcw,
+  Clock
 } from 'lucide-react-native';
 
 interface NoteBentoCardProps {
   note: LocalNote;
   variant?: 'compact' | 'full';
   isTrash?: boolean;
+  isVaultUnlocked?: boolean;
   onPress: () => void;
   onDelete: () => void;
   onArchiveToggle?: () => void;
   onRestore?: () => void;
 }
 
+// Clean markdown excerpt helper matching web
+function cleanMarkdown(text: string): string {
+  if (!text) return '';
+  return text
+    .replace(/!\[.*?\]\(.*?\)/g, '[Image]')
+    .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')
+    .replace(/#{1,6}\s+/g, '')
+    .replace(/(\*\*|__)(.*?)\1/g, '$2')
+    .replace(/(\*|_)(.*?)\1/g, '$2')
+    .replace(/`{1,3}.*?`{1,3}/gs, '[Code]')
+    .replace(/>\s+/g, '')
+    .replace(/[-*+]\s+/g, '• ')
+    .replace(/\n+/g, ' ')
+    .trim();
+}
+
 export const NoteBentoCard: React.FC<NoteBentoCardProps> = ({
   note,
   variant = 'compact',
   isTrash = false,
+  isVaultUnlocked = false,
   onPress,
   onDelete,
   onArchiveToggle,
@@ -50,10 +70,22 @@ export const NoteBentoCard: React.FC<NoteBentoCardProps> = ({
     }
   }
 
-  const dateStr = new Date(note.client_updated_at || note.updated_at || Date.now()).toLocaleDateString(undefined, {
+  const updatedDate = new Date(note.client_updated_at || note.updated_at || Date.now());
+  const dateStr = updatedDate.toLocaleDateString(undefined, {
     month: 'short',
     day: 'numeric',
   });
+  const timeStr = updatedDate.toLocaleTimeString(undefined, {
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  });
+  const formattedDate = `${dateStr}, ${timeStr}`;
+
+  const rawExcerpt = note.excerpt || note.content || '';
+  const displayExcerpt = isLocked && !isVaultUnlocked 
+    ? '●●● Encrypted with Stealth PIN'
+    : cleanMarkdown(rawExcerpt) || 'No content provided.';
 
   // --- FULL WIDTH VARIANT (Single / Memanjang) ---
   if (variant === 'full') {
@@ -73,7 +105,7 @@ export const NoteBentoCard: React.FC<NoteBentoCardProps> = ({
         <View style={styles.fullHeaderRow}>
           <View style={styles.fullTitleGroup}>
             <View style={[styles.iconBadge, { backgroundColor: palette.bgDark, borderColor: palette.borderDark }]}>
-              <FileText size={16} color={palette.primary} />
+              <FileText size={15} color={palette.primary} />
             </View>
             <Text style={styles.fullTitle} numberOfLines={1}>
               {note.title || 'Untitled Note'}
@@ -82,31 +114,36 @@ export const NoteBentoCard: React.FC<NoteBentoCardProps> = ({
 
           <View style={styles.badgesRow}>
             {isLocked && (
-              <View style={styles.lockBadge}>
-                <Lock size={12} color="#F59E0B" />
-              </View>
+              isVaultUnlocked ? (
+                <View style={styles.unlockedBadge}>
+                  <Unlock size={11} color="#10B981" />
+                  <Text style={styles.unlockedText}>Unlocked</Text>
+                </View>
+              ) : (
+                <View style={styles.lockedBadge}>
+                  <Lock size={11} color="#F59E0B" />
+                </View>
+              )
             )}
             {attachmentCount > 0 && (
               <View style={styles.attachBadge}>
-                <Paperclip size={12} color="#94A3B8" />
+                <Paperclip size={11} color="#94A3B8" />
                 <Text style={styles.badgeText}>{attachmentCount}</Text>
               </View>
             )}
-            <Text style={styles.dateText}>{dateStr}</Text>
           </View>
         </View>
 
         {/* Excerpt Body */}
         <Text style={styles.fullExcerpt} numberOfLines={2}>
-          {isLocked ? '●●● Encrypted with Stealth PIN' : (note.excerpt || 'No content')}
+          {displayExcerpt}
         </Text>
 
-        {/* Footer with Pill Tag & Actions */}
+        {/* Footer Row matching Web */}
         <View style={styles.fullFooterRow}>
-          <View style={[styles.categoryTag, { backgroundColor: palette.bgDark, borderColor: palette.borderDark }]}>
-            <Text style={[styles.categoryTagText, { color: palette.primary }]}>
-              {isTrash ? 'TRASH' : isArchived ? 'ARCHIVED' : isLocked ? 'VAULT' : 'ACTIVE NOTE'}
-            </Text>
+          <View style={styles.clockRow}>
+            <Clock size={12} color="#64748B" />
+            <Text style={styles.dateText}>{formattedDate}</Text>
           </View>
 
           <View style={styles.actionsRow}>
@@ -116,7 +153,7 @@ export const NoteBentoCard: React.FC<NoteBentoCardProps> = ({
                 onPress={onRestore}
                 hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
               >
-                <RotateCcw size={15} color="#10B981" />
+                <RotateCcw size={14} color="#10B981" />
               </TouchableOpacity>
             )}
 
@@ -127,9 +164,9 @@ export const NoteBentoCard: React.FC<NoteBentoCardProps> = ({
                 hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
               >
                 {isArchived ? (
-                  <ArchiveRestore size={15} color="#60A5FA" />
+                  <ArchiveRestore size={14} color="#60A5FA" />
                 ) : (
-                  <Archive size={15} color="#94A3B8" />
+                  <Archive size={14} color="#94A3B8" />
                 )}
               </TouchableOpacity>
             )}
@@ -139,7 +176,7 @@ export const NoteBentoCard: React.FC<NoteBentoCardProps> = ({
               onPress={onDelete}
               hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
             >
-              <Trash2 size={15} color={isTrash ? '#EF4444' : '#64748B'} />
+              <Trash2 size={14} color={isTrash ? '#EF4444' : '#64748B'} />
             </TouchableOpacity>
           </View>
         </View>
@@ -168,13 +205,19 @@ export const NoteBentoCard: React.FC<NoteBentoCardProps> = ({
 
         <View style={styles.badgesRow}>
           {isLocked && (
-            <View style={styles.lockBadge}>
-              <Lock size={11} color="#F59E0B" />
-            </View>
+            isVaultUnlocked ? (
+              <View style={styles.unlockedBadge}>
+                <Unlock size={10} color="#10B981" />
+              </View>
+            ) : (
+              <View style={styles.lockedBadge}>
+                <Lock size={10} color="#F59E0B" />
+              </View>
+            )
           )}
           {attachmentCount > 0 && (
             <View style={styles.attachBadge}>
-              <Paperclip size={11} color="#94A3B8" />
+              <Paperclip size={10} color="#94A3B8" />
               <Text style={styles.badgeText}>{attachmentCount}</Text>
             </View>
           )}
@@ -188,12 +231,15 @@ export const NoteBentoCard: React.FC<NoteBentoCardProps> = ({
 
       {/* Excerpt */}
       <Text style={styles.compactExcerpt} numberOfLines={3}>
-        {isLocked ? '●●● Encrypted' : (note.excerpt || 'No content')}
+        {displayExcerpt}
       </Text>
 
       {/* Compact Footer */}
       <View style={styles.compactFooter}>
-        <Text style={styles.dateText}>{dateStr}</Text>
+        <View style={styles.clockRow}>
+          <Clock size={11} color="#64748B" />
+          <Text style={styles.dateText}>{dateStr}</Text>
+        </View>
 
         <View style={styles.actionsRow}>
           {isTrash && onRestore && (
@@ -202,7 +248,7 @@ export const NoteBentoCard: React.FC<NoteBentoCardProps> = ({
               onPress={onRestore}
               hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
             >
-              <RotateCcw size={14} color="#10B981" />
+              <RotateCcw size={13} color="#10B981" />
             </TouchableOpacity>
           )}
 
@@ -213,9 +259,9 @@ export const NoteBentoCard: React.FC<NoteBentoCardProps> = ({
               hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
             >
               {isArchived ? (
-                <ArchiveRestore size={14} color="#60A5FA" />
+                <ArchiveRestore size={13} color="#60A5FA" />
               ) : (
-                <Archive size={14} color="#64748B" />
+                <Archive size={13} color="#64748B" />
               )}
             </TouchableOpacity>
           )}
@@ -225,7 +271,7 @@ export const NoteBentoCard: React.FC<NoteBentoCardProps> = ({
             onPress={onDelete}
             hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
           >
-            <Trash2 size={14} color={isTrash ? '#EF4444' : '#64748B'} />
+            <Trash2 size={13} color={isTrash ? '#EF4444' : '#64748B'} />
           </TouchableOpacity>
         </View>
       </View>
@@ -236,11 +282,11 @@ export const NoteBentoCard: React.FC<NoteBentoCardProps> = ({
 const styles = StyleSheet.create({
   // --- FULL CARD STYLES ---
   fullCard: {
-    backgroundColor: '#111827',
+    backgroundColor: '#11151F',
     borderRadius: 18,
     padding: 16,
     borderWidth: 1,
-    borderColor: '#1F293D',
+    borderColor: '#1E293B',
     minHeight: 140,
     justifyContent: 'space-between',
     width: '100%',
@@ -278,26 +324,15 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: 'rgba(255, 255, 255, 0.05)',
   },
-  categoryTag: {
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 6,
-    borderWidth: 1,
-  },
-  categoryTagText: {
-    fontSize: 9.5,
-    fontWeight: '800',
-    letterSpacing: 0.5,
-  },
 
   // --- COMPACT CARD STYLES ---
   compactCard: {
     flex: 1,
-    backgroundColor: '#111827',
+    backgroundColor: '#11151F',
     borderRadius: 18,
     padding: 14,
     borderWidth: 1,
-    borderColor: '#1F293D',
+    borderColor: '#1E293B',
     minHeight: 165,
     justifyContent: 'space-between',
   },
@@ -344,12 +379,28 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 6,
   },
-  lockBadge: {
+  lockedBadge: {
     backgroundColor: 'rgba(245, 158, 11, 0.12)',
     padding: 4,
     borderRadius: 6,
     borderWidth: 1,
     borderColor: 'rgba(245, 158, 11, 0.25)',
+  },
+  unlockedBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(16, 185, 129, 0.12)',
+    paddingHorizontal: 6,
+    paddingVertical: 3,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: 'rgba(16, 185, 129, 0.25)',
+    gap: 3,
+  },
+  unlockedText: {
+    fontSize: 9.5,
+    color: '#10B981',
+    fontWeight: '700',
   },
   attachBadge: {
     flexDirection: 'row',
@@ -365,9 +416,15 @@ const styles = StyleSheet.create({
     color: '#94A3B8',
     fontWeight: '600',
   },
+  clockRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
   dateText: {
-    fontSize: 11,
+    fontSize: 10.5,
     color: '#64748B',
+    fontFamily: 'System',
     fontWeight: '500',
   },
   actionsRow: {
