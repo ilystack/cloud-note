@@ -182,7 +182,7 @@ export const SearchModal: React.FC<SearchModalProps> = ({
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#0B0F19',
+    backgroundColor: '#121214',
   },
   header: {
     flexDirection: 'row',
@@ -190,7 +190,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 12,
     borderBottomWidth: 1,
-    borderBottomColor: '#1E293B',
+    borderBottomColor: '#27272A',
     gap: 12,
   },
   backBtn: {
@@ -200,19 +200,19 @@ const styles = StyleSheet.create({
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#111622',
+    backgroundColor: '#18191D',
     borderRadius: 14,
     paddingHorizontal: 12,
     height: 44,
     borderWidth: 1,
-    borderColor: '#1E293B',
+    borderColor: '#27272A',
   },
   searchIcon: {
     marginRight: 8,
   },
   searchInput: {
     flex: 1,
-    color: '#F8FAFC',
+    color: '#F4F4F5',
     fontSize: 14,
     height: '100%',
   },

@@ -80,11 +80,11 @@ export const CurvedBottomBar: React.FC<CurvedBottomBarProps> = ({
       <View style={StyleSheet.absoluteFill} pointerEvents="none">
         <Svg width={barWidth} height={barHeight}>
           {/* Main Bar Fill */}
-          <Path d={floatingBarPath} fill="#111622" />
+          <Path d={floatingBarPath} fill="#18191D" />
           {/* Top & Cradle Border */}
           <Path
             d={topBorderPath}
-            stroke="#1E293B"
+            stroke="#27272A"
             strokeWidth={1.5}
             fill="none"
           />
@@ -127,7 +127,7 @@ export const CurvedBottomBar: React.FC<CurvedBottomBarProps> = ({
           onPress={onPressAdd}
           hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
         >
-          <Plus size={36} color="#0B0F19" strokeWidth={3.2} />
+          <Plus size={36} color="#121214" strokeWidth={3.2} />
         </TouchableOpacity>
       </View>
     </View>

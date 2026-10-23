@@ -9,7 +9,8 @@ import {
   Modal,
   Alert,
   Animated,
-  Easing
+  Easing,
+  AppState
 } from 'react-native';
 import { BlurView } from 'expo-blur';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -109,7 +110,24 @@ export default function DashboardScreen() {
     loadData();
     const unsub = subscribeSyncState(setSyncState);
     syncMobileWithServer().then(loadData);
-    return unsub;
+
+    // Auto-sync when app returns to foreground from background/offline
+    const appStateSub = AppState.addEventListener('change', (state) => {
+      if (state === 'active') {
+        syncMobileWithServer().then(loadData);
+      }
+    });
+
+    // Periodic heartbeat sync every 25 seconds
+    const interval = setInterval(() => {
+      syncMobileWithServer().then(loadData);
+    }, 25000);
+
+    return () => {
+      unsub();
+      appStateSub.remove();
+      clearInterval(interval);
+    };
   }, [loadData]);
 
   const onRefresh = async () => {
@@ -339,7 +357,7 @@ export default function DashboardScreen() {
               onPress={() => requireAuth(() => setIsPinModalOpen(true))}
               activeOpacity={0.85}
             >
-              <KeyRound size={16} color="#0B0F19" />
+              <KeyRound size={16} color="#121214" />
               <Text style={styles.unlockBtnText}>Unlock Vault</Text>
             </TouchableOpacity>
           </View>
@@ -521,7 +539,7 @@ export default function DashboardScreen() {
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: '#0B0F19',
+    backgroundColor: '#121214',
   },
   header: {
     flexDirection: 'row',
@@ -529,7 +547,7 @@ const styles = StyleSheet.create({
     alignItems: 'flex-start',
     paddingHorizontal: 20,
     paddingTop: 8, // shifted title upward slightly
-    paddingBottom: 8,
+    paddingBottom: 10,
   },
   headerRightActions: {
     flexDirection: 'row',
@@ -541,22 +559,22 @@ const styles = StyleSheet.create({
     width: 34,
     height: 34,
     borderRadius: 12,
-    backgroundColor: '#11151F',
+    backgroundColor: '#18191D',
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1,
-    borderColor: '#1E293B',
+    borderColor: '#27272A',
   },
   syncStatusWidget: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 5,
-    backgroundColor: '#11151F',
+    backgroundColor: '#18191D',
     paddingHorizontal: 9,
     paddingVertical: 6,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: '#1E293B',
+    borderColor: '#27272A',
   },
   syncStatusText: {
     fontSize: 11,
@@ -591,9 +609,9 @@ const styles = StyleSheet.create({
     width: 64,
     height: 64,
     borderRadius: 22,
-    backgroundColor: '#11151F',
+    backgroundColor: '#18191D',
     borderWidth: 1,
-    borderColor: '#1E293B',
+    borderColor: '#27272A',
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: 16,
@@ -601,21 +619,21 @@ const styles = StyleSheet.create({
   emptyTitle: {
     fontSize: 18,
     fontWeight: '800',
-    color: '#F8FAFC',
+    color: '#F4F4F5',
     marginBottom: 8,
     textAlign: 'center',
   },
   emptySubtitle: {
     fontSize: 13,
-    color: '#64748B',
+    color: '#71717A',
     textAlign: 'center',
     lineHeight: 19,
   },
   lockedContainer: {
-    backgroundColor: '#11151F',
+    backgroundColor: '#18191D',
     borderRadius: 22,
     borderWidth: 1,
-    borderColor: '#1E293B',
+    borderColor: '#27272A',
     padding: 28,
     alignItems: 'center',
     marginTop: 20,
@@ -634,12 +652,12 @@ const styles = StyleSheet.create({
   lockedTitle: {
     fontSize: 18,
     fontWeight: '800',
-    color: '#F8FAFC',
+    color: '#F4F4F5',
     marginBottom: 8,
   },
   lockedSubtitle: {
     fontSize: 13,
-    color: '#94A3B8',
+    color: '#A1A1AA',
     textAlign: 'center',
     lineHeight: 19,
     marginBottom: 20,

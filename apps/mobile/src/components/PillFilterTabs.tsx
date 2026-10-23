@@ -80,8 +80,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 20,
-    marginTop: 6,
-    marginBottom: 10,
+    marginTop: 18,
+    marginBottom: 16,
     backgroundColor: 'transparent',
   },
   tabItem: {
@@ -94,11 +94,11 @@ const styles = StyleSheet.create({
   },
   // Home & Archived: Gray neutral pill matching Web
   activePillNeutral: {
-    borderColor: '#475569',
-    backgroundColor: 'rgba(255, 255, 255, 0.12)',
+    borderColor: 'rgba(255, 255, 255, 0.22)',
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
   },
   activeTextNeutral: {
-    color: '#F8FAFC',
+    color: '#F4F4F5',
     fontWeight: '800',
   },
   // Vault: Amber pill
@@ -124,7 +124,7 @@ const styles = StyleSheet.create({
     letterSpacing: 0.3,
   },
   inactiveText: {
-    color: '#64748B',
+    color: '#71717A',
     fontWeight: '600',
   },
 });

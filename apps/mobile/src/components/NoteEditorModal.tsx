@@ -14,11 +14,14 @@ import {
   Modal,
   Image as RNImage,
   LayoutAnimation,
-  UIManager
+  UIManager,
+  NativeSyntheticEvent,
+  NativeScrollEvent
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Svg, { Path } from 'react-native-svg';
 import { BlurView } from 'expo-blur';
+import { LinearGradient } from 'expo-linear-gradient';
 import * as ImagePicker from 'expo-image-picker';
 import { 
   generateExcerpt, 
@@ -30,9 +33,10 @@ import {
   Point
 } from '@cloudnotes/shared-types';
 import { upsertLocalNote, softDeleteLocalNote } from '../db/client';
-import { uploadMediaFromMobile } from '../services/api';
+import { uploadMediaFromMobile, getPocketBase } from '../services/api';
 import { syncMobileWithServer } from '../services/syncService';
 import { getMasterPin } from '../services/pinService';
+import { ServerModal } from './ServerModal';
 import { 
   Lock, 
   Unlock, 
@@ -75,15 +79,68 @@ const PRESET_BRUSH_COLORS = [
   '#F8FAFC',
 ];
 
-// 24 Swatches for Custom Free Color Picker (matching Web)
-const EXTENDED_PALETTE = [
-  '#EF4444', '#F43F5E', '#EC4899', '#E11D48',
-  '#F59E0B', '#F97316', '#FB923C', '#FBBF24',
-  '#10B981', '#059669', '#14B8A6', '#84CC16',
-  '#38BDF8', '#0EA5E9', '#3B82F6', '#06B6D4',
-  '#8B5CF6', '#A855F7', '#C084FC', '#6366F1',
-  '#F8FAFC', '#CBD5E1', '#64748B', '#1E293B',
-];
+// Convert HSL to Hex
+function hslToHex(h: number, s: number, l: number): string {
+  const sat = s / 100;
+  const light = l / 100;
+
+  const k = (n: number) => (n + h / 30) % 12;
+  const a = sat * Math.min(light, 1 - light);
+  const f = (n: number) =>
+    light - a * Math.max(-1, Math.min(k(n) - 3, Math.min(9 - k(n), 1)));
+
+  const toHex = (x: number) => {
+    const hex = Math.round(x * 255).toString(16);
+    return hex.length === 1 ? '0' + hex : hex;
+  };
+
+  return `#${toHex(f(0))}${toHex(f(8))}${toHex(f(4))}`.toUpperCase();
+}
+
+// Convert Hex to HSL
+function hexToHsl(hex: string): { h: number; s: number; l: number } {
+  let cleanHex = hex.replace('#', '').trim();
+  if (cleanHex.length === 3) {
+    cleanHex = cleanHex.split('').map((c) => c + c).join('');
+  }
+  if (cleanHex.length !== 6) {
+    return { h: 38, s: 100, l: 50 };
+  }
+
+  const r = parseInt(cleanHex.substring(0, 2), 16) / 255;
+  const g = parseInt(cleanHex.substring(2, 4), 16) / 255;
+  const b = parseInt(cleanHex.substring(4, 6), 16) / 255;
+
+  const max = Math.max(r, g, b);
+  const min = Math.min(r, g, b);
+  let h = 0;
+  let s = 0;
+  const l = (max + min) / 2;
+
+  if (max !== min) {
+    const d = max - min;
+    s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
+    switch (max) {
+      case r:
+        h = (g - b) / d + (g < b ? 6 : 0);
+        break;
+      case g:
+        h = (b - r) / d + 2;
+        break;
+      case b:
+        h = (r - g) / d + 4;
+        break;
+    }
+    h = Math.round(h * 60);
+  }
+
+  return {
+    h: Math.round(h < 0 ? h + 360 : h),
+    s: Math.round(s * 100),
+    l: Math.round(l * 100),
+  };
+}
+
 
 export interface NoteBlock {
   id: string;
@@ -236,6 +293,7 @@ export const NoteEditorModal: React.FC<NoteEditorModalProps> = ({
   const [attachments, setAttachments] = useState<string[]>([]);
   const [isUploading, setIsUploading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [isServerModalOpen, setIsServerModalOpen] = useState(false);
 
   // In-Place Drawing State
   const [isDrawingMode, setIsDrawingMode] = useState(false);
@@ -247,53 +305,46 @@ export const NoteEditorModal: React.FC<NoteEditorModalProps> = ({
 
   // Custom Color Picker Modal State
   const [colorPickerTarget, setColorPickerTarget] = useState<'cover' | 'brush' | null>(null);
-  const [tempHexInput, setTempHexInput] = useState('');
+  const [tempHexInput, setTempHexInput] = useState('#F59E0B');
+  const [hsl, setHsl] = useState<{ h: number; s: number; l: number }>({ h: 38, s: 100, l: 50 });
+  const [sliderTrackWidth, setSliderTrackWidth] = useState(260);
 
-  // Dynamic Keyboard Tracking
-  const [keyboardHeight, setKeyboardHeight] = useState(0);
+  // Drawing Controls Scroll Gradient Affordance
+  const [canScrollLeft, setCanScrollLeft] = useState(false);
+  const [canScrollRight, setCanScrollRight] = useState(true);
+
+  // Smooth drawing jitter filter ref
+  const lastPointRef = useRef<Point | null>(null);
+
+  const handleDrawingScroll = (e: NativeSyntheticEvent<NativeScrollEvent>) => {
+    const { contentOffset, layoutMeasurement, contentSize } = e.nativeEvent;
+    if (contentSize.width <= layoutMeasurement.width + 2) {
+      setCanScrollLeft(false);
+      setCanScrollRight(false);
+      return;
+    }
+    const isStart = contentOffset.x <= 4;
+    const isEnd = contentOffset.x >= contentSize.width - layoutMeasurement.width - 4;
+    setCanScrollLeft(!isStart);
+    setCanScrollRight(!isEnd);
+  };
 
   // Refs for focusing inputs & auto-scrolling
   const inputRefs = useRef<Record<string, TextInput | null>>({});
   const scrollRef = useRef<ScrollView | null>(null);
 
-  // Listen to keyboard show/hide events to dynamically follow keyboard on Android & iOS
-  useEffect(() => {
-    if (!visible) {
-      setKeyboardHeight(0);
-      return;
-    }
-
-    const onShow = (e: any) => {
-      const height = e?.endCoordinates?.height || 0;
-      LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
-      setKeyboardHeight(height);
-    };
-
-    const onHide = () => {
-      LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
-      setKeyboardHeight(0);
-    };
-
-    const showSub = Keyboard.addListener(
-      Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow',
-      onShow
-    );
-    const hideSub = Keyboard.addListener(
-      Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide',
-      onHide
-    );
-
-    return () => {
-      showSub.remove();
-      hideSub.remove();
-    };
-  }, [visible]);
-
   // Dynamic Toggle Drawing Mode with smooth transition & keyboard dismiss
   const toggleDrawingMode = () => {
     Keyboard.dismiss();
     LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
-    setIsDrawingMode(prev => !prev);
+    setIsDrawingMode(prev => {
+      const next = !prev;
+      if (next) {
+        setCanScrollLeft(false);
+        setCanScrollRight(true);
+      }
+      return next;
+    });
   };
 
   // Reset or Load Note on visible or note changes
@@ -347,6 +398,8 @@ export const NoteEditorModal: React.FC<NoteEditorModalProps> = ({
       setRedoHistory([]);
       setCurrentStroke([]);
       setIsDrawingMode(false);
+      setCanScrollLeft(false);
+      setCanScrollRight(true);
       const initId = `b_${Date.now()}`;
       setBlocks([{ id: initId, type: 'paragraph', text: '', isBold: false, isItalic: false }]);
       setActiveBlockId(initId);
@@ -412,8 +465,14 @@ export const NoteEditorModal: React.FC<NoteEditorModalProps> = ({
     }, 80);
   };
 
-  // Image Upload
+  // Image Upload (Prompts ServerModal if not logged in, matching main page buttons)
   const handlePickImage = async () => {
+    const pb = await getPocketBase();
+    if (!pb.authStore.isValid) {
+      setIsServerModalOpen(true);
+      return;
+    }
+
     try {
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ImagePicker.MediaTypeOptions.Images,
@@ -425,7 +484,25 @@ export const NoteEditorModal: React.FC<NoteEditorModalProps> = ({
         const asset = result.assets[0];
         setIsUploading(true);
 
-        const recordId = note?.id || `local_${Date.now()}`;
+        const pb = await getPocketBase();
+        let recordId = note?.id;
+
+        // If creating a new note or local-only note, create record on server first (matching Web)
+        if (!recordId || recordId.startsWith('local_') || recordId.length !== 15) {
+          const currentHtml = blocksToContent(blocks, strokes);
+          const created = await pb.collection('notes').create({
+            title: title || 'Untitled Note',
+            content: currentHtml,
+            cover_color: coverColor,
+            cover_icon: coverIcon,
+            is_locked: isLocked,
+            user_id: pb.authStore.model?.id,
+            client_updated_at: new Date().toISOString(),
+            version: 1,
+          });
+          recordId = created.id;
+        }
+
         const fileName = asset.fileName || `image_${Date.now()}.jpg`;
         const mimeType = asset.mimeType || 'image/jpeg';
 
@@ -437,7 +514,7 @@ export const NoteEditorModal: React.FC<NoteEditorModalProps> = ({
             id: `b_img_${Date.now()}`,
             type: 'image',
             text: fileName,
-            imageUrl: serverUrl || asset.uri,
+            imageUrl: serverUrl,
           };
           const nextPara: NoteBlock = {
             id: `b_${Date.now() + 1}`,
@@ -449,14 +526,15 @@ export const NoteEditorModal: React.FC<NoteEditorModalProps> = ({
 
           setBlocks(prev => [...prev, imgBlock, nextPara]);
           setActiveBlockId(nextPara.id);
-        } catch (err: any) {
-          Alert.alert('Upload Error', 'Could not upload to server: ' + err.message);
+        } catch (uploadErr: any) {
+          Alert.alert('Upload Error', 'Could not upload to server: ' + (uploadErr?.message || 'Unknown error'));
         } finally {
           setIsUploading(false);
         }
       }
     } catch (e: any) {
       Alert.alert('Error', e.message);
+      setIsUploading(false);
     }
   };
 
@@ -468,21 +546,35 @@ export const NoteEditorModal: React.FC<NoteEditorModalProps> = ({
     setBlocks(prev => prev.filter(b => b.id !== blockId));
   };
 
-  // In-Place Drawing Handlers
+  // In-Place Drawing Handlers (Optimized with quadratic beziers & distance threshold)
   const handleTouchStart = (e: GestureResponderEvent) => {
     if (!isDrawingMode) return;
     const { locationX, locationY } = e.nativeEvent;
-    setCurrentStroke([{ x: locationX, y: locationY }]);
+    const pt = { x: locationX, y: locationY };
+    lastPointRef.current = pt;
+    setCurrentStroke([pt]);
   };
 
   const handleTouchMove = (e: GestureResponderEvent) => {
     if (!isDrawingMode) return;
     const { locationX, locationY } = e.nativeEvent;
-    setCurrentStroke(prev => [...prev, { x: locationX, y: locationY }]);
+    const last = lastPointRef.current;
+    if (last) {
+      const dx = locationX - last.x;
+      const dy = locationY - last.y;
+      // Skip micro-jitter (distance < 2.5px) to prevent lag and state flooding
+      if (dx * dx + dy * dy < 6.25) {
+        return;
+      }
+    }
+    const pt = { x: locationX, y: locationY };
+    lastPointRef.current = pt;
+    setCurrentStroke(prev => [...prev, pt]);
   };
 
   const handleTouchEnd = () => {
     if (!isDrawingMode) return;
+    lastPointRef.current = null;
     if (currentStroke.length > 0) {
       const newStroke: Stroke = {
         color: brushColor,
@@ -515,15 +607,22 @@ export const NoteEditorModal: React.FC<NoteEditorModalProps> = ({
     setStrokes([]);
   };
 
+  // Smooth quadratic bezier path calculation with midpoints
   const pointsToSvgPath = (points: Point[]): string => {
     if (!points || points.length === 0) return '';
     if (points.length === 1) {
       return `M ${points[0].x} ${points[0].y} L ${points[0].x + 0.1} ${points[0].y + 0.1}`;
     }
-    let d = `M ${points[0].x} ${points[0].y}`;
-    for (let i = 1; i < points.length; i++) {
-      d += ` L ${points[i].x} ${points[i].y}`;
+    if (points.length === 2) {
+      return `M ${points[0].x} ${points[0].y} L ${points[1].x} ${points[1].y}`;
     }
+    let d = `M ${points[0].x} ${points[0].y}`;
+    for (let i = 1; i < points.length - 1; i++) {
+      const midX = (points[i].x + points[i + 1].x) / 2;
+      const midY = (points[i].y + points[i + 1].y) / 2;
+      d += ` Q ${points[i].x} ${points[i].y}, ${midX} ${midY}`;
+    }
+    d += ` L ${points[points.length - 1].x} ${points[points.length - 1].y}`;
     return d;
   };
 
@@ -609,13 +708,33 @@ export const NoteEditorModal: React.FC<NoteEditorModalProps> = ({
     ]);
   };
 
-  // Custom Color Selection Handlers
+  // Custom Color Selection Handlers with Live Sliders
   const openCustomColorModal = (target: 'cover' | 'brush') => {
     Keyboard.dismiss();
     setColorPickerTarget(target);
-    const curr = target === 'cover' ? coverColor : brushColor;
+    const curr = (target === 'cover' ? coverColor : brushColor) || '#F59E0B';
     setTempHexInput(curr);
+    setHsl(hexToHsl(curr));
   };
+
+  const handleHueTouch = (e: GestureResponderEvent) => {
+    if (sliderTrackWidth <= 0) return;
+    const x = Math.max(0, Math.min(sliderTrackWidth, e.nativeEvent.locationX));
+    const newH = Math.round((x / sliderTrackWidth) * 360);
+    const nextHsl = { ...hsl, h: newH };
+    setHsl(nextHsl);
+    setTempHexInput(hslToHex(nextHsl.h, nextHsl.s, nextHsl.l));
+  };
+
+  const handleLightnessTouch = (e: GestureResponderEvent) => {
+    if (sliderTrackWidth <= 0) return;
+    const x = Math.max(0, Math.min(sliderTrackWidth, e.nativeEvent.locationX));
+    const newL = Math.max(5, Math.min(95, Math.round((x / sliderTrackWidth) * 100)));
+    const nextHsl = { ...hsl, l: newL };
+    setHsl(nextHsl);
+    setTempHexInput(hslToHex(nextHsl.h, nextHsl.s, nextHsl.l));
+  };
+
 
   const applyCustomColor = (color: string) => {
     if (!color.startsWith('#')) {
@@ -642,7 +761,7 @@ export const NoteEditorModal: React.FC<NoteEditorModalProps> = ({
     >
       <SafeAreaView 
         style={styles.safeArea} 
-        edges={keyboardHeight > 0 ? ['top'] : ['top', 'bottom']}
+        edges={['top', 'bottom']}
       >
         <View style={styles.container}>
             {/* Row 1 (The Very Top): Cancel & Save (and Trash in middle if editing) */}
@@ -676,10 +795,10 @@ export const NoteEditorModal: React.FC<NoteEditorModalProps> = ({
                 activeOpacity={0.85}
               >
                 {isSaving ? (
-                  <ActivityIndicator size="small" color="#0B0F19" />
+                  <ActivityIndicator size="small" color="#121214" />
                 ) : (
                   <>
-                    <Check size={17} color="#0B0F19" strokeWidth={3} />
+                    <Check size={17} color="#121214" strokeWidth={3} />
                     <Text style={styles.saveBtnText}>Save</Text>
                   </>
                 )}
@@ -942,15 +1061,8 @@ export const NoteEditorModal: React.FC<NoteEditorModalProps> = ({
               </View>
             </View>
 
-            {/* Bottom Dock: Dynamic Formatting Toolbar & Drawing Card */}
-            <View 
-              style={[
-                styles.bottomDock,
-                keyboardHeight > 0 && {
-                  paddingBottom: keyboardHeight + (Platform.OS === 'android' ? 8 : 4),
-                }
-              ]}
-            >
+            {/* Bottom Dock: Formatting Toolbar & Drawing Card (Docked cleanly at bottom without jumping delay) */}
+            <View style={styles.bottomDock}>
               {/* Card 1: Formatting Toolbar (Bold, Italic, List, Code | Image, Draw) */}
               <View style={styles.toolbarBox}>
                 <View style={styles.formatLeftGroup}>
@@ -1040,90 +1152,133 @@ export const NoteEditorModal: React.FC<NoteEditorModalProps> = ({
               {/* Card 2: In-Place Drawing Controls Card (Renders underneath Card 1, lifting Card 1 UP!) */}
               {isDrawingMode && (
                 <View style={styles.drawingControlsCard}>
-                  <View style={styles.brushColorsRow}>
-                    {PRESET_BRUSH_COLORS.map(c => {
-                      const isSelected = brushColor.toLowerCase() === c.toLowerCase();
-                      return (
-                        <TouchableOpacity
-                          key={c}
-                          style={[
-                            styles.colorRingWrapperSmall,
-                            isSelected && styles.colorRingSelected,
-                          ]}
-                          onPress={() => setBrushColor(c)}
-                        >
-                          <View style={[styles.colorDotCoreSmall, { backgroundColor: c }]} />
-                        </TouchableOpacity>
-                      );
-                    })}
+                  {/* Left-edge fade gradient — appears when content has been scrolled right */}
+                  {canScrollLeft && (
+                    <LinearGradient
+                      colors={['#18191D', 'rgba(24, 25, 29, 0)']}
+                      start={{ x: 0, y: 0 }}
+                      end={{ x: 1, y: 0 }}
+                      style={styles.drawingCardFadeLeft}
+                      pointerEvents="none"
+                    />
+                  )}
 
-                    <TouchableOpacity
-                      style={[
-                        styles.colorRingWrapperSmall,
-                        isCustomBrush && styles.colorRingSelected,
-                        styles.customColorBtnSmall,
-                      ]}
-                      onPress={() => openCustomColorModal('brush')}
-                    >
-                      {isCustomBrush ? (
-                        <View style={[styles.colorDotCoreSmall, { backgroundColor: brushColor }]} />
-                      ) : (
-                        <Palette size={11} color="#94A3B8" />
-                      )}
-                    </TouchableOpacity>
-                  </View>
+                  {/* Horizontal scroll — uses ScrollView with decelerationRate fast for snappy feel */}
+                  <ScrollView
+                    horizontal
+                    showsHorizontalScrollIndicator={false}
+                    keyboardShouldPersistTaps="handled"
+                    decelerationRate="fast"
+                    nestedScrollEnabled={true}
+                    scrollEventThrottle={16}
+                    onScroll={handleDrawingScroll}
+                    contentContainerStyle={styles.drawingControlsScrollContent}
+                  >
+                    {/* Group 1: Brush Colors */}
+                    <View style={styles.brushColorsRow}>
+                      {PRESET_BRUSH_COLORS.map(c => {
+                        const isSelected = brushColor.toLowerCase() === c.toLowerCase();
+                        return (
+                          <TouchableOpacity
+                            key={c}
+                            style={[
+                              styles.colorRingWrapperSmall,
+                              isSelected && styles.colorRingSelected,
+                            ]}
+                            onPress={() => setBrushColor(c)}
+                          >
+                            <View style={[styles.colorDotCoreSmall, { backgroundColor: c }]} />
+                          </TouchableOpacity>
+                        );
+                      })}
 
-                  <View style={styles.brushWidthRow}>
-                    {[2, 4, 7].map(w => (
                       <TouchableOpacity
-                        key={w}
                         style={[
-                          styles.widthBtn,
-                          brushWidth === w && styles.widthBtnActive,
+                          styles.colorRingWrapperSmall,
+                          isCustomBrush && styles.colorRingSelected,
+                          styles.customColorBtnSmall,
                         ]}
-                        onPress={() => setBrushWidth(w)}
+                        onPress={() => openCustomColorModal('brush')}
                       >
-                        <View style={{ width: w * 2.2, height: w * 2.2, borderRadius: (w * 2.2) / 2, backgroundColor: brushColor }} />
+                        {isCustomBrush ? (
+                          <View style={[styles.colorDotCoreSmall, { backgroundColor: brushColor }]} />
+                        ) : (
+                          <Palette size={11} color="#94A3B8" />
+                        )}
                       </TouchableOpacity>
-                    ))}
-                  </View>
+                    </View>
 
-                  <View style={styles.drawingActionsRow}>
-                    <TouchableOpacity 
-                      style={styles.canvasToolBtn} 
-                      disabled={strokes.length === 0}
-                      onPress={handleUndoStroke}
-                      hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
-                    >
-                      <Undo size={14} color={strokes.length > 0 ? "#CBD5E1" : "#475569"} />
-                    </TouchableOpacity>
+                    {/* Divider */}
+                    <View style={styles.drawingCardDivider} />
 
-                    <TouchableOpacity 
-                      style={styles.canvasToolBtn} 
-                      disabled={redoHistory.length === 0}
-                      onPress={handleRedoStroke}
-                      hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
-                    >
-                      <Redo size={14} color={redoHistory.length > 0 ? "#CBD5E1" : "#475569"} />
-                    </TouchableOpacity>
+                    {/* Group 2: Brush Width */}
+                    <View style={styles.brushWidthRow}>
+                      {[2, 4, 7].map(w => (
+                        <TouchableOpacity
+                          key={w}
+                          style={[
+                            styles.widthBtn,
+                            brushWidth === w && styles.widthBtnActive,
+                          ]}
+                          onPress={() => setBrushWidth(w)}
+                        >
+                          <View style={{ width: w * 2.2, height: w * 2.2, borderRadius: (w * 2.2) / 2, backgroundColor: brushColor }} />
+                        </TouchableOpacity>
+                      ))}
+                    </View>
 
-                    {/* Clear button with Eraser icon and text (NO trash icon) */}
-                    <TouchableOpacity 
-                      style={[styles.canvasToolBtn, styles.clearBtn]} 
-                      disabled={strokes.length === 0}
-                      onPress={handleClearStrokes}
-                      hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
-                    >
-                      <Eraser size={14} color={strokes.length > 0 ? "#F43F5E" : "#475569"} />
-                      <Text style={[styles.clearBtnText, { color: strokes.length > 0 ? "#F43F5E" : "#475569" }]}>Clear</Text>
-                    </TouchableOpacity>
-                  </View>
+                    {/* Divider */}
+                    <View style={styles.drawingCardDivider} />
+
+                    {/* Group 3: Actions (Undo, Redo, Clear) */}
+                    <View style={styles.drawingActionsRow}>
+                      <TouchableOpacity 
+                        style={styles.canvasToolBtn} 
+                        disabled={strokes.length === 0}
+                        onPress={handleUndoStroke}
+                        hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+                      >
+                        <Undo size={14} color={strokes.length > 0 ? "#CBD5E1" : "#475569"} />
+                      </TouchableOpacity>
+
+                      <TouchableOpacity 
+                        style={styles.canvasToolBtn} 
+                        disabled={redoHistory.length === 0}
+                        onPress={handleRedoStroke}
+                        hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+                      >
+                        <Redo size={14} color={redoHistory.length > 0 ? "#CBD5E1" : "#475569"} />
+                      </TouchableOpacity>
+
+                      {/* Clear button */}
+                      <TouchableOpacity 
+                        style={[styles.canvasToolBtn, styles.clearBtn]} 
+                        disabled={strokes.length === 0}
+                        onPress={handleClearStrokes}
+                        hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+                      >
+                        <Eraser size={14} color={strokes.length > 0 ? "#F43F5E" : "#475569"} />
+                        <Text style={[styles.clearBtnText, { color: strokes.length > 0 ? "#F43F5E" : "#475569" }]}>Clear</Text>
+                      </TouchableOpacity>
+                    </View>
+                  </ScrollView>
+
+                  {/* Right-edge fade gradient — affordance: hints that content can be scrolled right */}
+                  {canScrollRight && (
+                    <LinearGradient
+                      colors={['rgba(24, 25, 29, 0)', '#18191D']}
+                      start={{ x: 0, y: 0 }}
+                      end={{ x: 1, y: 0 }}
+                      style={styles.drawingCardFadeRight}
+                      pointerEvents="none"
+                    />
+                  )}
                 </View>
               )}
             </View>
           </View>
 
-        {/* Custom Free Color Picker Modal (Inside Editor) */}
+        {/* Custom Free Color Picker Modal (Inside Editor) with Live Sliders */}
         <Modal
           visible={colorPickerTarget !== null}
           animationType="fade"
@@ -1131,7 +1286,7 @@ export const NoteEditorModal: React.FC<NoteEditorModalProps> = ({
           onRequestClose={() => setColorPickerTarget(null)}
         >
           <View style={styles.modalBackdrop}>
-            <BlurView intensity={75} tint="dark" style={StyleSheet.absoluteFill} />
+            <BlurView intensity={80} tint="dark" style={StyleSheet.absoluteFill} />
             <TouchableOpacity 
               style={StyleSheet.absoluteFill} 
               onPress={() => setColorPickerTarget(null)} 
@@ -1150,38 +1305,84 @@ export const NoteEditorModal: React.FC<NoteEditorModalProps> = ({
                   onPress={() => setColorPickerTarget(null)}
                   hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
                 >
-                  <X size={18} color="#94A3B8" />
+                  <X size={18} color="#A1A1AA" />
                 </TouchableOpacity>
               </View>
 
-              {/* Color Swatches Grid */}
-              <View style={styles.swatchesGrid}>
-                {EXTENDED_PALETTE.map(hex => (
-                  <TouchableOpacity
-                    key={hex}
-                    style={[
-                      styles.swatchItem,
-                      { backgroundColor: hex },
-                      tempHexInput.toLowerCase() === hex.toLowerCase() && styles.swatchItemSelected,
-                    ]}
-                    onPress={() => setTempHexInput(hex)}
-                    activeOpacity={0.8}
+              {/* Live Color Preview & Hex Display */}
+              <View style={styles.pickerPreviewRow}>
+                <View style={[styles.largePreviewBox, { backgroundColor: tempHexInput || '#F59E0B' }]} />
+                <View style={styles.hexInputWrapper}>
+                  <Text style={styles.hexLabel}>HEX CODE</Text>
+                  <TextInput
+                    value={tempHexInput}
+                    onChangeText={(val) => {
+                      setTempHexInput(val);
+                      if (/^#[0-9A-Fa-f]{6}$/.test(val) || /^[0-9A-Fa-f]{6}$/.test(val)) {
+                        setHsl(hexToHsl(val));
+                      }
+                    }}
+                    placeholder="#RRGGBB"
+                    placeholderTextColor="#71717A"
+                    autoCapitalize="characters"
+                    style={styles.hexTextInput}
                   />
-                ))}
+                </View>
               </View>
 
-              {/* Hex Code Input with Live Preview */}
-              <View style={styles.hexInputRow}>
-                <View style={[styles.hexPreviewBox, { backgroundColor: tempHexInput || '#1E293B' }]} />
-                <TextInput
-                  value={tempHexInput}
-                  onChangeText={setTempHexInput}
-                  placeholder="#RRGGBB"
-                  placeholderTextColor="#475569"
-                  autoCapitalize="characters"
-                  style={styles.hexTextInput}
-                />
+              {/* Slider 1: Hue Spectrum Bar (0 - 360) */}
+              <View style={styles.sliderGroup}>
+                <View style={styles.sliderLabelRow}>
+                  <Text style={styles.sliderLabel}>Hue</Text>
+                  <Text style={styles.sliderValue}>{hsl.h}°</Text>
+                </View>
+                <View 
+                  style={styles.sliderTrackContainer}
+                  onLayout={(e) => setSliderTrackWidth(e.nativeEvent.layout.width)}
+                  onTouchStart={handleHueTouch}
+                  onTouchMove={handleHueTouch}
+                >
+                  <LinearGradient
+                    colors={['#FF0000', '#FFFF00', '#00FF00', '#00FFFF', '#0000FF', '#FF00FF', '#FF0000']}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 0 }}
+                    style={styles.sliderGradientTrack}
+                  />
+                  <View 
+                    style={[
+                      styles.sliderThumb, 
+                      { left: `${Math.max(0, Math.min(100, (hsl.h / 360) * 100))}%` }
+                    ]} 
+                  />
+                </View>
               </View>
+
+              {/* Slider 2: Brightness / Lightness Bar */}
+              <View style={styles.sliderGroup}>
+                <View style={styles.sliderLabelRow}>
+                  <Text style={styles.sliderLabel}>Brightness</Text>
+                  <Text style={styles.sliderValue}>{hsl.l}%</Text>
+                </View>
+                <View 
+                  style={styles.sliderTrackContainer}
+                  onTouchStart={handleLightnessTouch}
+                  onTouchMove={handleLightnessTouch}
+                >
+                  <LinearGradient
+                    colors={['#000000', hslToHex(hsl.h, hsl.s, 50), '#FFFFFF']}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 0 }}
+                    style={styles.sliderGradientTrack}
+                  />
+                  <View 
+                    style={[
+                      styles.sliderThumb, 
+                      { left: `${Math.max(0, Math.min(100, hsl.l))}%` }
+                    ]} 
+                  />
+                </View>
+              </View>
+
 
               {/* Modal Actions */}
               <View style={styles.modalActionsRow}>
@@ -1196,13 +1397,22 @@ export const NoteEditorModal: React.FC<NoteEditorModalProps> = ({
                   style={styles.modalApplyBtn}
                   onPress={() => applyCustomColor(tempHexInput)}
                 >
-                  <Check size={16} color="#0B0F19" strokeWidth={3} />
+                  <Check size={16} color="#121214" strokeWidth={3} />
                   <Text style={styles.modalApplyText}>Apply Color</Text>
                 </TouchableOpacity>
               </View>
             </View>
           </View>
         </Modal>
+
+        {/* Server Login Modal (Opened if user taps Image when unauthenticated) */}
+        <ServerModal
+          visible={isServerModalOpen}
+          onClose={() => setIsServerModalOpen(false)}
+          onLoginSuccess={() => {
+            setIsServerModalOpen(false);
+          }}
+        />
       </SafeAreaView>
     </Modal>
   );
@@ -1211,14 +1421,14 @@ export const NoteEditorModal: React.FC<NoteEditorModalProps> = ({
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: '#0B0F19',
+    backgroundColor: '#121214',
   },
   flex1: {
     flex: 1,
   },
   container: {
     flex: 1,
-    backgroundColor: '#0B0F19',
+    backgroundColor: '#121214',
   },
 
   /* Row 1: Top Action Bar (Cancel on left, Delete in center, Save on right) */
@@ -1230,24 +1440,24 @@ const styles = StyleSheet.create({
     paddingTop: 8,
     paddingBottom: 10,
     borderBottomWidth: 1,
-    borderBottomColor: '#1E293B',
-    backgroundColor: '#0B0F19',
+    borderBottomColor: '#27272A',
+    backgroundColor: '#121214',
   },
   cancelBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    backgroundColor: '#161E2E',
+    backgroundColor: '#18191D',
     paddingHorizontal: 14,
     paddingVertical: 8,
     borderRadius: 11,
     borderWidth: 1,
-    borderColor: '#1E293B',
+    borderColor: '#27272A',
   },
   cancelBtnText: {
     fontSize: 13,
     fontWeight: '700',
-    color: '#94A3B8',
+    color: '#A1A1AA',
   },
   deleteBtn: {
     width: 36,
@@ -1271,7 +1481,7 @@ const styles = StyleSheet.create({
   saveBtnText: {
     fontSize: 14,
     fontWeight: '800',
-    color: '#0B0F19',
+    color: '#121214',
   },
 
   /* Row 2: Sub-Top Bar (Cover palette on left, Lock icon on right) */
@@ -1282,8 +1492,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: 18,
     paddingVertical: 8,
     borderBottomWidth: 1,
-    borderBottomColor: '#1E293B',
-    backgroundColor: '#0E1422',
+    borderBottomColor: '#27272A',
+    backgroundColor: '#18191D',
   },
   coverSection: {
     flexDirection: 'row',
@@ -1324,7 +1534,7 @@ const styles = StyleSheet.create({
   },
   customColorBtn: {
     borderWidth: 1.5,
-    borderColor: '#334155',
+    borderColor: '#3F3F46',
     borderStyle: 'dashed',
     backgroundColor: 'rgba(255, 255, 255, 0.04)',
   },
@@ -1334,11 +1544,11 @@ const styles = StyleSheet.create({
     width: 36,
     height: 36,
     borderRadius: 11,
-    backgroundColor: '#161E2E',
+    backgroundColor: '#18191D',
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1,
-    borderColor: '#1E293B',
+    borderColor: '#27272A',
   },
   lockIconBtnActive: {
     backgroundColor: 'rgba(245, 158, 11, 0.16)',
@@ -1354,7 +1564,7 @@ const styles = StyleSheet.create({
   titleInput: {
     fontSize: 22,
     fontWeight: '800',
-    color: '#F8FAFC',
+    color: '#F4F4F5',
     paddingVertical: 4,
   },
 
@@ -1370,17 +1580,17 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    backgroundColor: '#161E2E',
+    backgroundColor: '#18191D',
     paddingHorizontal: 10,
     paddingVertical: 5,
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: '#1E293B',
+    borderColor: '#27272A',
     maxWidth: '85%',
   },
   attachmentName: {
     fontSize: 11,
-    color: '#94A3B8',
+    color: '#A1A1AA',
     fontWeight: '600',
   },
 
@@ -1388,7 +1598,7 @@ const styles = StyleSheet.create({
   editorAreaContainer: {
     flex: 1,
     position: 'relative',
-    backgroundColor: '#0B0F19',
+    backgroundColor: '#121214',
   },
   blocksScrollView: {
     flex: 1,
@@ -1417,26 +1627,26 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: 16,
     lineHeight: 24,
-    color: '#E2E8F0',
+    color: '#E4E4E7',
     padding: 0,
   },
 
   /* Visual WYSIWYG Styles (Bold is ACTUALLY bold, Italic is ACTUALLY italic) */
   textBold: {
     fontWeight: '800',
-    color: '#F8FAFC',
+    color: '#F4F4F5',
   },
   textItalic: {
     fontStyle: 'italic',
-    color: '#CBD5E1',
+    color: '#D4D4D8',
   },
 
   /* Code Block Card */
   codeBlockCard: {
-    backgroundColor: '#141B2B',
+    backgroundColor: '#18191D',
     borderRadius: 10,
     borderWidth: 1,
-    borderColor: '#1E293B',
+    borderColor: '#27272A',
     padding: 12,
     marginBottom: 10,
   },
@@ -1466,8 +1676,8 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     overflow: 'hidden',
     borderWidth: 1,
-    borderColor: '#1E293B',
-    backgroundColor: '#111624',
+    borderColor: '#27272A',
+    backgroundColor: '#18191D',
   },
   inlineImage: {
     width: '100%',
@@ -1497,14 +1707,14 @@ const styles = StyleSheet.create({
     height: 1,
   },
 
-  /* Bottom Dock: Stacks Formatting Toolbar & Drawing Toolbar dynamically */
+  /* Bottom Dock: Clean docked bar at bottom */
   bottomDock: {
     paddingHorizontal: 16,
     paddingTop: 8,
-    paddingBottom: Platform.OS === 'android' ? 12 : 8,
-    backgroundColor: '#0B0F19',
+    paddingBottom: Platform.OS === 'android' ? 14 : 10,
+    backgroundColor: '#121214',
     borderTopWidth: 1,
-    borderTopColor: '#1E293B',
+    borderTopColor: '#27272A',
     gap: 8,
   },
 
@@ -1565,17 +1775,45 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
 
-  /* In-Place Drawing Controls Card (Card 2: Sits underneath Card 1) */
+  /* In-Place Drawing Controls Card */
   drawingControlsCard: {
-    backgroundColor: '#0F1522',
+    backgroundColor: '#18191D',
     borderWidth: 1,
-    borderColor: '#1E293B',
+    borderColor: '#27272A',
     borderRadius: 14,
-    paddingHorizontal: 12,
     paddingVertical: 8,
+    overflow: 'hidden',
+  },
+  drawingControlsScrollContent: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
+    paddingHorizontal: 14,
+    paddingRight: 24,
+    gap: 10,
+  },
+  drawingCardDivider: {
+    width: 1,
+    height: 22,
+    backgroundColor: '#27272A',
+    borderRadius: 1,
+  },
+  drawingCardFadeLeft: {
+    position: 'absolute',
+    left: 0,
+    top: 0,
+    bottom: 0,
+    width: 32,
+    zIndex: 10,
+    pointerEvents: 'none',
+  },
+  drawingCardFadeRight: {
+    position: 'absolute',
+    right: 0,
+    top: 0,
+    bottom: 0,
+    width: 32,
+    zIndex: 10,
+    pointerEvents: 'none',
   },
   brushColorsRow: {
     flexDirection: 'row',
@@ -1598,7 +1836,7 @@ const styles = StyleSheet.create({
   },
   customColorBtnSmall: {
     borderWidth: 1.5,
-    borderColor: '#334155',
+    borderColor: '#3F3F46',
     borderStyle: 'dashed',
     backgroundColor: 'rgba(255, 255, 255, 0.04)',
   },
@@ -1613,7 +1851,7 @@ const styles = StyleSheet.create({
     borderRadius: 6,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#161E2E',
+    backgroundColor: '#222328',
   },
   widthBtnActive: {
     borderWidth: 1,
@@ -1628,7 +1866,9 @@ const styles = StyleSheet.create({
     width: 28,
     height: 28,
     borderRadius: 8,
-    backgroundColor: '#161E2E',
+    backgroundColor: '#222328',
+    borderWidth: 1,
+    borderColor: '#27272A',
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -1638,16 +1878,19 @@ const styles = StyleSheet.create({
     gap: 3,
     paddingHorizontal: 8,
     width: 'auto',
+    backgroundColor: 'rgba(244, 63, 94, 0.12)',
+    borderWidth: 1,
+    borderColor: 'rgba(244, 63, 94, 0.25)',
   },
   clearBtnText: {
     fontSize: 11,
     fontWeight: '700',
   },
 
-  /* Custom Color Picker Modal */
+  /* Custom Color Picker Modal with Sliders */
   modalBackdrop: {
     flex: 1,
-    backgroundColor: 'rgba(3, 7, 18, 0.85)',
+    backgroundColor: 'rgba(0, 0, 0, 0.75)',
     justifyContent: 'center',
     alignItems: 'center',
     padding: 24,
@@ -1655,10 +1898,10 @@ const styles = StyleSheet.create({
   modalCard: {
     width: '100%',
     maxWidth: 340,
-    backgroundColor: '#0F1522',
+    backgroundColor: '#17181C',
     borderRadius: 20,
     borderWidth: 1,
-    borderColor: '#1E293B',
+    borderColor: '#27272A',
     padding: 20,
     elevation: 20,
   },
@@ -1676,51 +1919,90 @@ const styles = StyleSheet.create({
   modalTitle: {
     fontSize: 15,
     fontWeight: '800',
-    color: '#F8FAFC',
+    color: '#F4F4F5',
   },
-  swatchesGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 10,
-    marginBottom: 16,
-    justifyContent: 'center',
-  },
-  swatchItem: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    borderWidth: 2,
-    borderColor: 'transparent',
-  },
-  swatchItemSelected: {
-    borderColor: '#FFFFFF',
-    transform: [{ scale: 1.15 }],
-  },
-  hexInputRow: {
+  pickerPreviewRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
-    marginBottom: 18,
-    backgroundColor: '#161F30',
+    gap: 12,
+    marginBottom: 16,
+  },
+  largePreviewBox: {
+    width: 48,
+    height: 48,
+    borderRadius: 14,
+    borderWidth: 2,
+    borderColor: 'rgba(255, 255, 255, 0.15)',
+  },
+  hexInputWrapper: {
+    flex: 1,
+    backgroundColor: '#1F2024',
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: '#1E293B',
+    borderColor: '#27272A',
     paddingHorizontal: 12,
     paddingVertical: 6,
   },
-  hexPreviewBox: {
-    width: 26,
-    height: 26,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.2)',
+  hexLabel: {
+    fontSize: 9,
+    fontWeight: '700',
+    color: '#71717A',
+    letterSpacing: 0.8,
+    marginBottom: 2,
   },
   hexTextInput: {
-    flex: 1,
-    color: '#F8FAFC',
-    fontSize: 14,
-    fontWeight: '700',
+    color: '#F4F4F5',
+    fontSize: 15,
+    fontWeight: '800',
     fontFamily: Platform.OS === 'android' ? 'monospace' : 'Menlo',
+    padding: 0,
+  },
+  sliderGroup: {
+    marginBottom: 14,
+  },
+  sliderLabelRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 6,
+  },
+  sliderLabel: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#A1A1AA',
+  },
+  sliderValue: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#F4F4F5',
+    fontFamily: Platform.OS === 'android' ? 'monospace' : 'Menlo',
+  },
+  sliderTrackContainer: {
+    height: 22,
+    borderRadius: 11,
+    justifyContent: 'center',
+    position: 'relative',
+  },
+  sliderGradientTrack: {
+    ...StyleSheet.absoluteFillObject,
+    borderRadius: 11,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.12)',
+  },
+  sliderThumb: {
+    position: 'absolute',
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 3,
+    borderColor: '#121214',
+    marginLeft: -12,
+    elevation: 4,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 3,
   },
   modalActionsRow: {
     flexDirection: 'row',
@@ -1732,14 +2014,14 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     borderRadius: 10,
-    backgroundColor: '#161E2E',
+    backgroundColor: '#18191D',
     borderWidth: 1,
-    borderColor: '#1E293B',
+    borderColor: '#27272A',
   },
   modalCancelText: {
     fontSize: 13,
     fontWeight: '700',
-    color: '#94A3B8',
+    color: '#A1A1AA',
   },
   modalApplyBtn: {
     flex: 1.3,
@@ -1754,6 +2036,6 @@ const styles = StyleSheet.create({
   modalApplyText: {
     fontSize: 13,
     fontWeight: '800',
-    color: '#0B0F19',
+    color: '#121214',
   },
 });

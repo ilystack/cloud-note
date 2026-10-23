@@ -135,7 +135,7 @@ export const StealthPinPad: React.FC<StealthPinPadProps> = ({
             style={[styles.keyButton, styles.submitKey]}
             onPress={handleSubmit}
           >
-            <Check size={26} color="#0B0F19" strokeWidth={3} />
+            <Check size={26} color="#121214" strokeWidth={3} />
           </TouchableOpacity>
         </View>
       </View>
@@ -175,12 +175,12 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 22,
     fontWeight: '800',
-    color: '#F8FAFC',
+    color: '#F4F4F5',
     textAlign: 'center',
   },
   subtitle: {
     fontSize: 13,
-    color: '#94A3B8',
+    color: '#A1A1AA',
     textAlign: 'center',
     marginTop: 6,
     paddingHorizontal: 20,
@@ -189,16 +189,16 @@ const styles = StyleSheet.create({
     width: '100%',
     height: 56,
     borderRadius: 18,
-    backgroundColor: '#0F172A',
+    backgroundColor: '#18191D',
     borderWidth: 1,
-    borderColor: '#1E293B',
+    borderColor: '#27272A',
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: 8,
   },
   placeholderText: {
     fontSize: 13,
-    color: '#475569',
+    color: '#71717A',
     fontStyle: 'italic',
   },
   maskText: {
@@ -225,19 +225,19 @@ const styles = StyleSheet.create({
     width: 76,
     height: 70,
     borderRadius: 20,
-    backgroundColor: '#1E293B',
+    backgroundColor: '#18191D',
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.05)',
+    borderColor: '#27272A',
   },
   keyText: {
     fontSize: 24,
     fontWeight: '700',
-    color: '#F8FAFC',
+    color: '#F4F4F5',
   },
   specialKey: {
-    backgroundColor: '#162032',
+    backgroundColor: '#222328',
   },
   submitKey: {
     backgroundColor: '#F59E0B',
@@ -249,7 +249,7 @@ const styles = StyleSheet.create({
   },
   clearText: {
     fontSize: 13,
-    color: '#94A3B8',
+    color: '#A1A1AA',
     textDecorationLine: 'underline',
   },
 });

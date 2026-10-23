@@ -282,11 +282,11 @@ export const NoteBentoCard: React.FC<NoteBentoCardProps> = ({
 const styles = StyleSheet.create({
   // --- FULL CARD STYLES ---
   fullCard: {
-    backgroundColor: '#11151F',
+    backgroundColor: '#18191D',
     borderRadius: 18,
     padding: 16,
     borderWidth: 1,
-    borderColor: '#1E293B',
+    borderColor: '#27272A',
     minHeight: 140,
     justifyContent: 'space-between',
     width: '100%',
@@ -307,12 +307,12 @@ const styles = StyleSheet.create({
   fullTitle: {
     fontSize: 16,
     fontWeight: '800',
-    color: '#F8FAFC',
+    color: '#F4F4F5',
     flex: 1,
   },
   fullExcerpt: {
     fontSize: 13,
-    color: '#94A3B8',
+    color: '#A1A1AA',
     lineHeight: 18,
     marginBottom: 10,
   },
@@ -322,17 +322,17 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingTop: 8,
     borderTopWidth: 1,
-    borderTopColor: 'rgba(255, 255, 255, 0.05)',
+    borderTopColor: 'rgba(255, 255, 255, 0.06)',
   },
 
   // --- COMPACT CARD STYLES ---
   compactCard: {
     flex: 1,
-    backgroundColor: '#11151F',
+    backgroundColor: '#18191D',
     borderRadius: 18,
     padding: 14,
     borderWidth: 1,
-    borderColor: '#1E293B',
+    borderColor: '#27272A',
     minHeight: 165,
     justifyContent: 'space-between',
   },
@@ -345,13 +345,13 @@ const styles = StyleSheet.create({
   compactTitle: {
     fontSize: 14.5,
     fontWeight: '700',
-    color: '#F8FAFC',
+    color: '#F4F4F5',
     marginBottom: 4,
     lineHeight: 19,
   },
   compactExcerpt: {
     fontSize: 12,
-    color: '#94A3B8',
+    color: '#A1A1AA',
     lineHeight: 16,
     flex: 1,
   },
@@ -362,7 +362,7 @@ const styles = StyleSheet.create({
     marginTop: 8,
     paddingTop: 8,
     borderTopWidth: 1,
-    borderTopColor: 'rgba(255, 255, 255, 0.05)',
+    borderTopColor: 'rgba(255, 255, 255, 0.06)',
   },
 
   // --- SHARED STYLES ---
@@ -405,7 +405,7 @@ const styles = StyleSheet.create({
   attachBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#1E293B',
+    backgroundColor: '#27272A',
     paddingHorizontal: 5,
     paddingVertical: 3,
     borderRadius: 6,
@@ -413,7 +413,7 @@ const styles = StyleSheet.create({
   },
   badgeText: {
     fontSize: 9.5,
-    color: '#94A3B8',
+    color: '#A1A1AA',
     fontWeight: '600',
   },
   clockRow: {
@@ -423,7 +423,7 @@ const styles = StyleSheet.create({
   },
   dateText: {
     fontSize: 10.5,
-    color: '#64748B',
+    color: '#71717A',
     fontFamily: 'System',
     fontWeight: '500',
   },
